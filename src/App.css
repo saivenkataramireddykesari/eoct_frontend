@@ -1,0 +1,13 @@
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-size: 18px;
+  color: #666;
+}
+
+/* Additional App-specific styles */
+.App {
+  min-height: 100vh;
+}
