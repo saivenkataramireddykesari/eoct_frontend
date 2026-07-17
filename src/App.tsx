@@ -11,6 +11,8 @@ import Customers from './components/Customers';
 import Registrations from './components/Registrations';
 import Alerts from './components/Alerts';
 import AuditLogs from './components/AuditLogs';
+import RegulatoryCustomers from './components/RegulatoryCustomers';
+import CreateCustomer from './components/CreateCustomer';
 import './App.css';
 
 interface User {
@@ -27,7 +29,6 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is stored in localStorage
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
     if (storedUser && token) {
@@ -52,53 +53,54 @@ function App() {
     return <div className="loading">Loading...</div>;
   }
 
+  // Guard: Ensure user is logged in
+  const authGuard = (element: React.ReactElement) =>
+    user ? element : <Navigate to="/login" />;
+
+  // Guard: Artwork users get redirected to /products on administrative routes
+  const artworkGuard = (element: React.ReactElement) =>
+    user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : element) : <Navigate to="/login" />;
+
   return (
     <Router>
       <div className="App">
         <Routes>
-          <Route 
-            path="/login" 
-            element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />} 
+          <Route
+            path="/login"
+            element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />}
           />
-          <Route 
-            path="/" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Dashboard user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
+          {/* Root: land directly on Dashboard for all logged-in departments */}
+          <Route
+            path="/"
+            element={
+              user
+                ? <Dashboard user={user} onLogout={handleLogout} />
+                : <Navigate to="/login" />
+            }
           />
-          <Route 
-            path="/orders" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Orders user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
+          <Route
+            path="/dashboard"
+            element={user ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/orders/create" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <CreateOrder user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
+          <Route path="/orders" element={authGuard(<Orders user={user!} onLogout={handleLogout} />)} />
+          <Route path="/orders/create" element={artworkGuard(<CreateOrder user={user!} onLogout={handleLogout} />)} />
+          <Route path="/orders/:id" element={authGuard(<OrderDetail user={user!} onLogout={handleLogout} />)} />
+          <Route path="/orders/edit/:id" element={artworkGuard(<EditOrder user={user!} onLogout={handleLogout} />)} />
+          <Route
+            path="/products"
+            element={user ? <Products user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/orders/:id" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <OrderDetail user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
+          <Route path="/customers" element={artworkGuard(<Customers user={user!} onLogout={handleLogout} />)} />
+          <Route
+            path="/customers/create"
+            element={user && user.department === 'Exports' ? <CreateCustomer /> : <Navigate to="/login" />}
           />
-          <Route 
-            path="/orders/edit/:id" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <EditOrder user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/products" 
-            element={user ? <Products user={user} onLogout={handleLogout} /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/customers" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Customers user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/registrations" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Registrations user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/alerts" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Alerts user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/audit-logs" 
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <AuditLogs user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} 
+          <Route path="/registrations" element={artworkGuard(<Registrations user={user!} onLogout={handleLogout} />)} />
+          <Route path="/alerts" element={authGuard(<Alerts user={user!} onLogout={handleLogout} />)} />
+          <Route path="/audit-logs" element={artworkGuard(<AuditLogs user={user!} onLogout={handleLogout} />)} />
+          <Route
+            path="/regulatory-customers"
+            element={user ? <RegulatoryCustomers user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
           />
         </Routes>
       </div>

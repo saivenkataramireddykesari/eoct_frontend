@@ -11,8 +11,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [pmModal, setPmModal] = useState<{ sku: string; current: string } | null>(null);
-  const [pmCodeInput, setPmCodeInput] = useState('');
+  const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string; secondaryPmCode: string; leafPmCode: string } | null>(null);
+  const [primaryPmCodeInput, setPrimaryPmCodeInput] = useState('');
+  const [secondaryPmCodeInput, setSecondaryPmCodeInput] = useState('');
+  const [leafPmCodeInput, setLeafPmCodeInput] = useState('');
   
   // PM Code Request workflow states
   const [historyModal, setHistoryModal] = useState<any | null>(null);
@@ -21,7 +23,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [artworkSubmitModal, setArtworkSubmitModal] = useState<{ requestId: number; sku: string } | null>(null);
   const [artworkPmCode, setArtworkPmCode] = useState('');
   const [artworkRemarks, setArtworkRemarks] = useState('');
-  const [acceptModal, setAcceptModal] = useState<{ requestId: number; pmCode: string } | null>(null);
+  const [acceptModal, setAcceptModal] = useState<{ requestId: number; primaryPmCode: string; secondaryPmCode: string; leafPmCode: string } | null>(null);
   const [acceptRemarks, setAcceptRemarks] = useState('');
 
   const [formData, setFormData] = useState({
@@ -33,7 +35,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     pack_size: '',
     standard_batch_size: '',
     moq: '',
-    pm_code: '',
+    primary_pm_code: '',
+    secondary_pm_code: '',
+    leaf_pm_code: '',
     artwork_status: 'Not Available',
   });
 
@@ -57,12 +61,15 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      console.log("Submitting product with PM Codes:", formData.primary_pm_code, formData.secondary_pm_code, formData.leaf_pm_code);
       await productAPI.createProduct({
         ...formData,
         standard_batch_size: parseInt(formData.standard_batch_size) || null,
         moq: parseInt(formData.moq) || null,
-        // pm_code only sent if artwork is Available
-        pm_code: formData.artwork_status === 'Available' ? formData.pm_code : '',
+        // pm_codes only sent if artwork is Available
+        primary_pm_code: formData.artwork_status === 'Available' ? formData.primary_pm_code : '',
+        secondary_pm_code: formData.artwork_status === 'Available' ? formData.secondary_pm_code : '',
+        leaf_pm_code: formData.artwork_status === 'Available' ? formData.leaf_pm_code : '',
         current_artwork_version: '',
       });
       setShowModal(false);
@@ -76,7 +83,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
         pack_size: '',
         standard_batch_size: '',
         moq: '',
-        pm_code: '',
+        primary_pm_code: '',
+        secondary_pm_code: '',
+        leaf_pm_code: '',
         artwork_status: 'Not Available',
       });
     } catch (error) {
@@ -87,13 +96,16 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   const handlePmCodeUpdate = async () => {
     if (!pmModal) return;
+    console.log("Updating PM Codes for SKU:", pmModal.sku, "with values:", primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
     try {
-      await productAPI.updatePmCode(pmModal.sku, pmCodeInput);
+      await productAPI.updatePmCode(pmModal.sku, primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
       setPmModal(null);
-      setPmCodeInput('');
+      setPrimaryPmCodeInput('');
+      setSecondaryPmCodeInput('');
+      setLeafPmCodeInput('');
       fetchProducts();
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Error updating PM Code');
+      alert(error.response?.data?.detail || 'Error updating PM Codes');
     }
   };
 
@@ -116,15 +128,18 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   };
 
   const handleArtworkSubmit = async () => {
-    if (!artworkSubmitModal || !artworkPmCode.trim()) return;
+    if (!artworkSubmitModal || !primaryPmCodeInput.trim()) return;
+    console.log("Artwork submitting PM Codes for request:", artworkSubmitModal.requestId, "with values:", primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
     try {
-      await productAPI.submitPmCode(artworkSubmitModal.requestId, artworkPmCode, artworkRemarks);
+      await productAPI.submitPmCode(artworkSubmitModal.requestId, primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput, artworkRemarks);
       setArtworkSubmitModal(null);
-      setArtworkPmCode('');
+      setPrimaryPmCodeInput('');
+      setSecondaryPmCodeInput('');
+      setLeafPmCodeInput('');
       setArtworkRemarks('');
       fetchProducts();
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Error submitting PM Code');
+      alert(error.response?.data?.detail || 'Error submitting PM Codes');
     }
   };
 
@@ -168,7 +183,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 <th>Pack Size</th>
                 <th>Batch Size</th>
                 <th>MOQ</th>
-                <th>PM Code</th>
+                <th>Primary PM Code</th>
+                <th>Secondary PM Code</th>
+                <th>Leaf PM Code</th>
                 <th>Artwork Status</th>
                 <th>PM Request Status</th>
                 <th>History</th>
@@ -213,7 +230,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     <td>{product.pack_size}</td>
                     <td>{product.standard_batch_size}</td>
                     <td>{product.moq}</td>
-                    <td>{product.pm_code || '—'}</td>
+                    <td>{product.primary_pm_code || '—'}</td>
+                    <td>{product.secondary_pm_code || '—'}</td>
+                    <td>{product.leaf_pm_code || '—'}</td>
                     <td>
                       <span className={`status-badge ${getArtworkStatusClass(product.artwork_status)}`}>
                         {product.artwork_status}
@@ -254,7 +273,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                             <button
                               className="submit-button"
                               style={{ background: '#4caf50', borderColor: '#4caf50', padding: '4px 8px', fontSize: '0.85em' }}
-                              onClick={() => setAcceptModal({ requestId: latestRequest.id, pmCode: latestRequest.current_pm_code })}
+                              onClick={() => setAcceptModal({ requestId: latestRequest.id, primaryPmCode: latestRequest.current_pm_code || '', secondaryPmCode: latestRequest.secondary_pm_code || '', leafPmCode: latestRequest.leaf_pm_code || '' })}
                             >
                               Accept ({latestRequest.current_pm_code})
                             </button>
@@ -273,7 +292,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                             style={{ background: '#ff9800', borderColor: '#ff9800' }}
                             onClick={() => {
                               setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
-                              setArtworkPmCode(product.pm_code || '');
+                              setPrimaryPmCodeInput(product.primary_pm_code || '');
+                              setSecondaryPmCodeInput(product.secondary_pm_code || '');
+                              setLeafPmCodeInput(product.leaf_pm_code || '');
                             }}
                           >
                             Submit PM Code
@@ -355,8 +376,16 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   <span className="mobile-card-value">{product.moq}</span>
                 </div>
                 <div className="mobile-card-row">
-                  <span className="mobile-card-label">PM Code</span>
-                  <span className="mobile-card-value">{product.pm_code || '—'}</span>
+                  <span className="mobile-card-label">Primary PM Code</span>
+                  <span className="mobile-card-value">{product.primary_pm_code || '—'}</span>
+                </div>
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Secondary PM Code</span>
+                  <span className="mobile-card-value">{product.secondary_pm_code || '—'}</span>
+                </div>
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Leaf PM Code</span>
+                  <span className="mobile-card-value">{product.leaf_pm_code || '—'}</span>
                 </div>
                 <div className="mobile-card-row">
                   <span className="mobile-card-label">Artwork Status</span>
@@ -406,7 +435,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                         <button
                           className="submit-button"
                           style={{ background: '#4caf50', borderColor: '#4caf50', flex: 1, padding: '6px', fontSize: '0.85em' }}
-                          onClick={() => setAcceptModal({ requestId: latestRequest.id, pmCode: latestRequest.current_pm_code })}
+                          onClick={() => setAcceptModal({ requestId: latestRequest.id, primaryPmCode: latestRequest.current_pm_code || '', secondaryPmCode: '', leafPmCode: '' })}
                         >
                           Accept ({latestRequest.current_pm_code})
                         </button>
@@ -532,7 +561,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 <label>Artwork Status</label>
                 <select
                   value={formData.artwork_status}
-                  onChange={(e) => setFormData({ ...formData, artwork_status: e.target.value, pm_code: '' })}
+                  onChange={(e) => setFormData({ ...formData, artwork_status: e.target.value, primary_pm_code: '', secondary_pm_code: '', leaf_pm_code: '' })}
                 >
                   <option value="Available">Available</option>
                   <option value="Pending">Pending</option>
@@ -542,20 +571,41 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
               {/* PM Code — only editable if Artwork Status = Available */}
               {formData.artwork_status === 'Available' && (
+                <>
                 <div className="form-group">
-                  <label>PM Code *</label>
+                  <label>Primary PM Code *</label>
                   <input
                     type="text"
-                    value={formData.pm_code}
-                    onChange={(e) => setFormData({ ...formData, pm_code: e.target.value })}
+                    value={formData.primary_pm_code}
+                    onChange={(e) => setFormData({ ...formData, primary_pm_code: e.target.value })}
                     required
                     placeholder="e.g. PM-PARA-500"
                   />
                 </div>
+                <div className="form-group">
+                  <label>Secondary PM Code</label>
+                  <input
+                    type="text"
+                    value={formData.secondary_pm_code}
+                    onChange={(e) => setFormData({ ...formData, secondary_pm_code: e.target.value })}
+                    placeholder="Optional Secondary PM Code"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Leaf PM Code</label>
+                  <input
+                    type="text"
+                    value={formData.leaf_pm_code}
+                    onChange={(e) => setFormData({ ...formData, leaf_pm_code: e.target.value })}
+                    placeholder="Optional Leaf PM Code"
+                  />
+                </div>
+                </>
               )}
               {formData.artwork_status !== 'Available' && (
+                <>
                 <div className="form-group">
-                  <label>PM Code</label>
+                  <label>Primary PM Code</label>
                   <input
                     type="text"
                     value="To be updated by Artwork via Get PM Code workflow"
@@ -563,6 +613,25 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     style={{ color: '#999', background: '#f5f5f5' }}
                   />
                 </div>
+                <div className="form-group">
+                  <label>Secondary PM Code</label>
+                  <input
+                    type="text"
+                    value="To be updated by Artwork via Get PM Code workflow"
+                    disabled
+                    style={{ color: '#999', background: '#f5f5f5' }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Leaf PM Code</label>
+                  <input
+                    type="text"
+                    value="To be updated by Artwork via Get PM Code workflow"
+                    disabled
+                    style={{ color: '#999', background: '#f5f5f5' }}
+                  />
+                </div>
+                </>
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
@@ -580,20 +649,38 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       {pmModal && (
         <div className="modal-overlay" onClick={() => setPmModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Update PM Code — {pmModal.sku}</h2>
+            <h2>Update PM Codes — {pmModal.sku}</h2>
             <div className="form-group">
-              <label>PM Code *</label>
+              <label>Primary PM Code *</label>
               <input
                 type="text"
-                value={pmCodeInput}
-                onChange={(e) => setPmCodeInput(e.target.value)}
-                placeholder="Enter PM Code"
+                value={primaryPmCodeInput}
+                onChange={(e) => setPrimaryPmCodeInput(e.target.value)}
+                placeholder="Enter Primary PM Code"
                 required
               />
             </div>
+            <div className="form-group">
+              <label>Secondary PM Code</label>
+              <input
+                type="text"
+                value={secondaryPmCodeInput}
+                onChange={(e) => setSecondaryPmCodeInput(e.target.value)}
+                placeholder="Enter Secondary PM Code"
+              />
+            </div>
+            <div className="form-group">
+              <label>Leaf PM Code</label>
+              <input
+                type="text"
+                value={leafPmCodeInput}
+                onChange={(e) => setLeafPmCodeInput(e.target.value)}
+                placeholder="Enter Leaf PM Code"
+              />
+            </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button className="submit-button" onClick={handlePmCodeUpdate} disabled={!pmCodeInput.trim()}>
-                Save PM Code
+              <button className="submit-button" onClick={handlePmCodeUpdate} disabled={!primaryPmCodeInput.trim()}>
+                Save PM Codes
               </button>
               <button className="nav-button" onClick={() => setPmModal(null)}>
                 Cancel
@@ -618,7 +705,11 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               color: '#2e7d32'
             }}>
               Please review the PM Code submitted by the Artwork team:<br/>
-              <strong style={{ fontSize: '1.2em', display: 'block', marginTop: '6px' }}>{acceptModal.pmCode}</strong>
+              <strong style={{ fontSize: '1.2em', display: 'block', marginTop: '6px' }}>
+                Primary: {acceptModal.primaryPmCode || 'N/A'}<br/>
+                Secondary: {acceptModal.secondaryPmCode || 'N/A'}<br/>
+                Leaf: {acceptModal.leafPmCode || 'N/A'}
+              </strong>
             </div>
             <div className="form-group">
               <label>Remarks (Optional)</label>
@@ -704,17 +795,35 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
       {/* Submit PM Code Modal for Artwork */}
       {artworkSubmitModal && (
-        <div className="modal-overlay" onClick={() => { setArtworkSubmitModal(null); setArtworkPmCode(''); setArtworkRemarks(''); }}>
+        <div className="modal-overlay" onClick={() => { setArtworkSubmitModal(null); setPrimaryPmCodeInput(''); setSecondaryPmCodeInput(''); setLeafPmCodeInput(''); setArtworkRemarks(''); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Submit PM Code for SKU: {artworkSubmitModal.sku}</h2>
+            <h2>Submit PM Codes for SKU: {artworkSubmitModal.sku}</h2>
             <div className="form-group">
-              <label>PM Code *</label>
+              <label>Primary PM Code *</label>
               <input
                 type="text"
-                value={artworkPmCode}
-                onChange={(e) => setArtworkPmCode(e.target.value)}
-                placeholder="Enter PM Code (e.g. PM-PARA-500)"
+                value={primaryPmCodeInput}
+                onChange={(e) => setPrimaryPmCodeInput(e.target.value)}
+                placeholder="Enter Primary PM Code (e.g. PM-PARA-500)"
                 required
+              />
+            </div>
+            <div className="form-group">
+              <label>Secondary PM Code</label>
+              <input
+                type="text"
+                value={secondaryPmCodeInput}
+                onChange={(e) => setSecondaryPmCodeInput(e.target.value)}
+                placeholder="Enter Secondary PM Code"
+              />
+            </div>
+            <div className="form-group">
+              <label>Leaf PM Code</label>
+              <input
+                type="text"
+                value={leafPmCodeInput}
+                onChange={(e) => setLeafPmCodeInput(e.target.value)}
+                placeholder="Enter Leaf PM Code"
               />
             </div>
             <div className="form-group">
@@ -728,14 +837,14 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               />
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button 
+              <button
                 className="submit-button"
                 onClick={handleArtworkSubmit}
-                disabled={!artworkPmCode.trim()}
+                disabled={!primaryPmCodeInput.trim()}
               >
                 Submit to Regulatory
               </button>
-              <button className="nav-button" onClick={() => { setArtworkSubmitModal(null); setArtworkPmCode(''); setArtworkRemarks(''); }}>
+              <button className="nav-button" onClick={() => { setArtworkSubmitModal(null); setPrimaryPmCodeInput(''); setSecondaryPmCodeInput(''); setLeafPmCodeInput(''); setArtworkRemarks(''); }}>
                 Cancel
               </button>
             </div>

@@ -38,8 +38,9 @@ export const orderAPI = {
   updateOrder: (id: number, data: any) => api.put(`/orders/${id}`, data),
   approveOrder: (id: number, data: any) => api.put(`/orders/${id}/approve`, data),
   canApproveOrder: (id: number) => api.get(`/orders/${id}/can-approve`),
-  updateMilestone: (orderId: number, milestoneName: string, data: any) =>
-    api.put(`/orders/${orderId}/milestone/${milestoneName}`, data),
+  updateMilestone: (milestoneId: number, data: any) =>
+    api.put(`/milestones/${milestoneId}`, data),
+  getMilestoneHistory: (milestoneId: number) => api.get(`/milestones/${milestoneId}/history`),
 };
 
 // Product APIs
@@ -48,10 +49,10 @@ export const productAPI = {
   getProductsByCountry: (country: string) => api.get('/products/by-country', { params: { country } }),
   createProduct: (data: any) => api.post('/products', data),
   getProduct: (sku: string) => api.get(`/products/${sku}`),
-  updatePmCode: (sku: string, pmCode: string) => api.patch(`/products/${sku}/pm-code`, { pm_code: pmCode }),
+  updatePmCode: (sku: string, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string) => api.patch(`/products/${sku}/pm-code`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode }),
   getPmRequests: () => api.get('/products/pm-requests'),
   requestPmCode: (sku: string) => api.post(`/products/${sku}/pm-requests`),
-  submitPmCode: (requestId: number, pmCode: string, remarks?: string) => api.post(`/products/pm-requests/${requestId}/submit`, { pm_code: pmCode, remarks }),
+  submitPmCode: (requestId: number, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string, remarks?: string) => api.post(`/products/pm-requests/${requestId}/submit`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, remarks }),
   decidePmCode: (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string) => api.post(`/products/pm-requests/${requestId}/decide`, { decision, remarks }),
 };
 

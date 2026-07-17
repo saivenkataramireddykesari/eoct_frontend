@@ -76,14 +76,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           overflowX: 'auto'
         }}>
           <p><strong>Sample Login Credentials:</strong></p>
-          <p>Admin: ADMIN001 / admin123</p>
           <p>Export Manager: EXP001 / password123</p>
           <p>Export Team: EXP002 / password123</p>
           <p>Regulatory: REG001 / password123</p>
           <p>SCM: SCM001 / password123</p>
           <p>Artwork: ART001 / password123</p>
           <p>Finance: FIN001 / password123</p>
-          <p>Management: MGT001 / password123</p>
         </div>
       </div>
     </div>

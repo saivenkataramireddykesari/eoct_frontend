@@ -37,7 +37,7 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, customerProducts, on
     if (!product.skuCode) {
       onUpdateMany(product.id, {
         productName: '', category: '', packSize: '',
-        batchSize: '', moq: '', artworkStatus: 'Not Available', pmCode: '',
+        batchSize: '', moq: '', artworkStatus: 'Not Available', primaryPmCode: '', secondaryPmCode: '', leafPmCode: '',
         price: '', totalPrice: 0, // Reset price and totalPrice
       });
     }
@@ -125,11 +125,23 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, customerProducts, on
           </select>
         </div>
         {product.artworkStatus === 'Available' && (
-          <div style={fld}>
-            <label style={lbl}>PM Code *</label>
-            <input type="text" value={product.pmCode} onChange={e => onUpdate(product.id, 'pmCode', e.target.value)}
-              required style={inp} placeholder="e.g. PM-PARA-500" />
-          </div>
+          <>
+            <div style={fld}>
+              <label style={lbl}>Primary PM Code *</label>
+              <input type="text" value={product.primaryPmCode} onChange={e => onUpdate(product.id, 'primaryPmCode', e.target.value)}
+                required style={inp} placeholder="e.g. PM-PARA-500" />
+            </div>
+            <div style={fld}>
+              <label style={lbl}>Secondary PM Code</label>
+              <input type="text" value={product.secondaryPmCode} onChange={e => onUpdate(product.id, 'secondaryPmCode', e.target.value)}
+                style={inp} placeholder="Optional Secondary PM Code" />
+            </div>
+            <div style={fld}>
+              <label style={lbl}>Leaf PM Code</label>
+              <input type="text" value={product.leafPmCode} onChange={e => onUpdate(product.id, 'leafPmCode', e.target.value)}
+                style={inp} placeholder="Optional Leaf PM Code" />
+            </div>
+          </>
         )}
       </div>
 

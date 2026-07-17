@@ -5,9 +5,10 @@ import Header from './Header';
 interface AlertsProps {
   user: any;
   onLogout: () => void;
+  refreshAlerts?: () => void;
 }
 
-const Alerts: React.FC<AlertsProps> = ({ user, onLogout }) => {
+const Alerts: React.FC<AlertsProps> = ({ user, onLogout, refreshAlerts }) => {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,6 +31,9 @@ const Alerts: React.FC<AlertsProps> = ({ user, onLogout }) => {
     try {
       await alertAPI.markAsRead(alertId);
       fetchAlerts();
+      if (refreshAlerts) {
+        refreshAlerts();
+      }
     } catch (error) {
       console.error('Error marking alert as read:', error);
     }
@@ -85,7 +89,7 @@ const Alerts: React.FC<AlertsProps> = ({ user, onLogout }) => {
 
   return (
     <div className="dashboard-container">
-      <Header user={user} onLogout={onLogout} />
+      <Header user={user} onLogout={onLogout} refreshAlerts={refreshAlerts} />
 
       <div className="panel">
         <h2>Alerts & Notifications</h2>

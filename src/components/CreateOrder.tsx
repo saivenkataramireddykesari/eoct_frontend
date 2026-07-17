@@ -27,7 +27,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user || user.department !== 'Exports' || user.role !== 'user') {
+    if (!user || user.department !== 'Exports' || !['user', 'Team', 'Manager'].includes(user.role)) {
       navigate('/dashboard');
       alert('You are not authorized to create orders.');
     }
@@ -49,6 +49,8 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const [poDate, setPoDate]         = useState('');
   const [requestedDate, setRequestedDate] = useState('');
   const [shippingTerms, setShippingTerms] = useState('');
+  const [orderType, setOrderType]   = useState('PNS');   // PNS or PP
+  const [orderCategory, setOrderCategory] = useState(''); // Drug, Nutra, Excipient
   const [salesQty, setSalesQty]     = useState('');
   const [freeQty, setFreeQty]       = useState('');
   const [importLicRequired, setImportLicRequired] = useState('Yes');
@@ -221,6 +223,8 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
           country,
           customer_id: parseInt(customerId),
           sku: product.skuCode,
+          order_type: orderType,
+          category: orderCategory || null,
           po_number: poNumber,
           po_date: poDate || null,
           requested_delivery_date: requestedDate || null,
@@ -339,6 +343,25 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
                 <label style={lbl}>Shipping Terms</label>
                 <input type="text" value={shippingTerms} onChange={e => setShippingTerms(e.target.value)}
                   style={inp} placeholder="e.g. FOB Mumbai" />
+              </div>
+            </div>
+            {/* Order Type & Category */}
+            <div style={{ ...grid2, marginTop: '16px' }}>
+              <div style={fld}>
+                <label style={lbl}>Order Type *</label>
+                <select value={orderType} onChange={e => setOrderType(e.target.value)} style={inp}>
+                  <option value="PNS">PNS</option>
+                  <option value="PP">PP</option>
+                </select>
+              </div>
+              <div style={fld}>
+                <label style={lbl}>Category *</label>
+                <select value={orderCategory} onChange={e => setOrderCategory(e.target.value)} required style={inp}>
+                  <option value="">— Select Category —</option>
+                  <option value="Drug">Drug</option>
+                  <option value="Nutra">Nutra</option>
+                  <option value="Excipient">Excipient</option>
+                </select>
               </div>
             </div>
           </div>
