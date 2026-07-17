@@ -227,6 +227,43 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     return [...order.approvals].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   };
 
+  const canShowApproveButton = (approval: any) => {
+    // Add console debugging as requested
+    console.log({
+        userDepartment: user.department,
+        userRole: user.role,
+        approvalDepartment: approval.department,
+        approvalSequence: approval.sequence,
+        approvalStatus: approval.status,
+        canApproveStatus
+    });
+
+    if (approval.status !== 'PENDING') {
+      return false;
+    }
+
+    // For Exports Manager
+    const isExportsManager = user.department === 'Exports' && user.role?.toLowerCase() === 'manager';
+    if (isExportsManager) {
+      return (
+        canApproveStatus?.is_exports_override === true &&
+        approval.sequence === canApproveStatus?.current_sequence
+      );
+    }
+
+    // For normal departments
+    if (approval.department.toUpperCase() === user.department.toUpperCase()) {
+      return canApproveStatus?.can_approve === true;
+    }
+
+    // For SCM override
+    if (user.department === 'SCM') {
+      return canApproveStatus?.is_scm_override === true;
+    }
+
+    return false;
+  };
+
   if (loading) {
     return <div className="loading">Loading order details...</div>;
   }
@@ -391,10 +428,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                     ? isExportsManagerApproval && approval.sequence === canApproveStatus?.current_sequence
                     : approval.department.toUpperCase() === user.department.toUpperCase();
 
-                  const showApproveBtn =
-                    approval.status === 'PENDING' &&
-                    canApproveStatus?.can_approve &&
-                    (deptMatchesThisRow || (user.department === 'SCM' && canApproveStatus?.is_scm_override));
+                  const showApproveBtn = canShowApproveButton(approval);
 
                   return (
                   <tr key={approval.id}>
@@ -466,15 +500,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             {sortedApprovals.map((approval: any) => {
               const isScmOverride =
                 approval.remarks && approval.remarks.startsWith('[SCM Override]');
-              const showApproveBtn =
-                approval.status === 'PENDING' &&
-                canApproveStatus?.can_approve &&
-                (
-                  approval.department.toUpperCase() === user.department.toUpperCase() ||
-                  (user.department === 'SCM' && canApproveStatus?.is_scm_override) ||
-                  (user.department === 'Exports' && user.role === 'manager' &&
-                    (approval.department === 'EXPORTS_MANAGER_INITIAL' || approval.department === 'EXPORTS_MANAGER_FINAL'))
-                );
+              const showApproveBtn = canShowApproveButton(approval);
               return (
               <div key={approval.id} className="mobile-card">
                 <div className="mobile-card-row">

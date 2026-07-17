@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = 'https://eoct-backend.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -68,6 +68,7 @@ export const customerAPI = {
 // Registration APIs
 export const registrationAPI = {
   getRegistrations: () => api.get('/registrations'),
+  getCountries: () => api.get('/countries'),
   createRegistration: (data: any) => api.post('/registrations', data),
   uploadCertificate: (id: number, file: File) => {
     const formData = new FormData();

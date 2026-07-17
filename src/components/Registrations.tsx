@@ -9,7 +9,9 @@ interface RegistrationsProps {
 
 const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   const [registrations, setRegistrations] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]); // All products
+  const [filteredSkus, setFilteredSkus] = useState<any[]>([]); // SKUs filtered by country
+  const [countries, setCountries] = useState<string[]>([]); // List of countries
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,21 +26,53 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     fetchData();
+    fetchCountries();
   }, []);
+
+  useEffect(() => {
+    if (formData.country) {
+      filterProductsByCountry(formData.country);
+    } else {
+      setFilteredSkus([]); // Clear SKUs if no country selected
+    }
+  }, [formData.country, products]); // Re-run when country or all products change
+
+  const fetchCountries = async () => {
+    try {
+      const response = await registrationAPI.getCountries();
+      console.log('API Response for Countries:', response);
+      setCountries(response.data.countries);
+      console.log('Countries state after update:', response.data.countries);
+    } catch (error) {
+      console.error('Error fetching countries:', error);
+    }
+  };
+
+  const filterProductsByCountry = async (country: string) => {
+    try {
+      const response = await productAPI.getProductsByCountry(country);
+      setFilteredSkus(response.data);
+    } catch (error) {
+      console.error(`Error fetching products for ${country}:`, error);
+      setFilteredSkus([]);
+    }
+  };
 
   const fetchData = async () => {
     try {
-      const [regRes, prodRes] = await Promise.all([
-        registrationAPI.getRegistrations(),
-        productAPI.getProducts(),
-      ]);
+      const regRes = await registrationAPI.getRegistrations();
       setRegistrations(regRes.data);
-      setProducts(prodRes.data);
+      // No initial product fetching, as it will be dynamic based on country
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const country = e.target.value;
+    setFormData(prev => ({ ...prev, country: country, sku: '' })); // Reset SKU when country changes
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -248,12 +282,18 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label>Country *</label>
-                <input
-                  type="text"
+                <select
                   value={formData.country}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, country: e.target.value })}
+                  onChange={handleCountryChange}
                   required
-                />
+                >
+                  <option value="">Select Country</option>
+                  {countries.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
@@ -264,8 +304,8 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                   required
                 >
                   <option value="">Select SKU</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.sku_code}>
+                  {filteredSkus.map((product) => (
+                    <option key={product.sku_code} value={product.sku_code}>
                       {product.sku_code} - {product.product_name}
                     </option>
                   ))}
