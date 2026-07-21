@@ -2,6 +2,8 @@ import axios from 'axios';
 
 const API_URL = 'https://eoct-backend.onrender.com/api';
 
+// https://eoct-backend.onrender.com
+
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -32,7 +34,7 @@ export const dashboardAPI = {
 
 // Order APIs
 export const orderAPI = {
-  getOrders: (status?: string) => api.get('/orders', { params: { status } }),
+  getOrders: (status?: string, skip: number = 0, limit: number = 20) => api.get('/orders', { params: { status, skip, limit } }),
   getOrder: (id: number) => api.get(`/orders/${id}`),
   createOrder: (data: any) => api.post('/orders', data),
   updateOrder: (id: number, data: any) => api.put(`/orders/${id}`, data),
@@ -45,7 +47,7 @@ export const orderAPI = {
 
 // Product APIs
 export const productAPI = {
-  getProducts: () => api.get('/products'),
+  getProducts: (skip: number = 0, limit: number = 20) => api.get('/products', { params: { skip, limit } }),
   getProductsByCountry: (country: string) => api.get('/products/by-country', { params: { country } }),
   createProduct: (data: any) => api.post('/products', data),
   getProduct: (sku: string) => api.get(`/products/${sku}`),
@@ -57,18 +59,36 @@ export const productAPI = {
 };
 
 // Customer APIs
+export interface Customer {
+  id: number;
+  customer_name: string;
+  country: string;
+  payment_terms: string | null;
+  agreement_status: string;
+  agreement_validity: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  order_type?: string; // New field
+  default_artwork_status?: string; // New field
+  order_count?: number;
+  category?: string;
+}
+
+
 export const customerAPI = {
-  getCustomers: () => api.get('/customers'),
-  getCustomersByCountry: (country: string) => api.get(`/customers?country=${country}`),
-  createCustomer: (data: any) => api.post('/customers', data),
-  getCustomer: (id: number) => api.get(`/customers/${id}`),
-  getProductsForCustomer: (customerId: number) => api.get(`/customers/${customerId}/products`),
+  getCustomers: (skip: number = 0, limit: number = 20) => api.get<Customer[]>('/customers', { params: { skip, limit } }),
+  getCustomersByCountry: (country: string, skip: number = 0, limit: number = 20) => api.get<Customer[]>('/customers', { params: { country, skip, limit } }),
+  createCustomer: (data: any) => api.post<Customer>('/customers', data),
+  getCustomer: (id: number) => api.get<Customer>(`/customers/${id}`),
+  getProductsForCustomer: (customerId: number) => api.get<any[]>(`/customers/${customerId}/products`),
 };
 
 // Registration APIs
 export const registrationAPI = {
-  getRegistrations: () => api.get('/registrations'),
+  getRegistrations: (skip: number = 0, limit: number = 20) => api.get('/registrations', { params: { skip, limit } }),
   getCountries: () => api.get('/countries'),
+  getRegistrationsBySku: (sku: string) => api.get('/registrations/by-sku', { params: { sku } }),
   createRegistration: (data: any) => api.post('/registrations', data),
   uploadCertificate: (id: number, file: File) => {
     const formData = new FormData();
@@ -87,7 +107,8 @@ export const alertAPI = {
 
 // Audit Log APIs
 export const auditAPI = {
-  getAuditLogs: (orderId?: number) => api.get('/audit-logs', { params: { order_id: orderId } }),
+  getAuditLogs: (orderId?: number, skip: number = 0, limit: number = 20) => api.get('/audit-logs', { params: { order_id: orderId, skip, limit } }),
 };
+
 
 export default api;

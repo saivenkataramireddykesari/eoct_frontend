@@ -27,7 +27,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
 
   // ── Add Registration (Regulatory) ──────────────────────────────────────────
   const [showRegForm, setShowRegForm] = useState(false);
-  const [products, setProducts] = useState<any[]>([]);
+  const [regCountries, setRegCountries] = useState<string[]>([]);
+  const [filteredSkus, setFilteredSkus] = useState<any[]>([]);
+  const [regsBySku, setRegsBySku] = useState<any[]>([]);
+  const [selectedSkuProduct, setSelectedSkuProduct] = useState<any>(null);
   const [regForm, setRegForm] = useState({
     country: '',
     sku: '',
@@ -43,9 +46,64 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
   useEffect(() => {
     fetchDashboard();
     if (user.department === 'Regulatory') {
-      productAPI.getProducts().then(r => setProducts(r.data)).catch(() => {});
+      registrationAPI.getCountries()
+        .then(r => setRegCountries(r.data.countries || []))
+        .catch(() => {});
     }
   }, []);
+
+  // When country changes → load SKUs for that country
+  const handleRegCountryChange = async (country: string) => {
+    setRegForm(prev => ({ ...prev, country, sku: '', registration_number: '' }));
+    setFilteredSkus([]);
+    setRegsBySku([]);
+    setSelectedSkuProduct(null);
+    if (country) {
+      try {
+        const r = await productAPI.getProductsByCountry(country);
+        setFilteredSkus(r.data);
+      } catch { setFilteredSkus([]); }
+    }
+  };
+
+  // When SKU changes → load registrations for that SKU + product details
+  const handleRegSkuChange = async (sku: string) => {
+    setRegForm(prev => ({ ...prev, sku, registration_number: '' }));
+    setRegsBySku([]);
+    setSelectedSkuProduct(null);
+    if (sku) {
+      try {
+        const [regRes, prodRes] = await Promise.all([
+          registrationAPI.getRegistrationsBySku(sku),
+          productAPI.getProduct(sku),
+        ]);
+        setRegsBySku(regRes.data);
+        setSelectedSkuProduct(prodRes.data);
+      } catch { setRegsBySku([]); setSelectedSkuProduct(null); }
+    }
+  };
+
+  // When registration number is selected → auto-fill form fields
+  const handleRegNumberChange = (regNumber: string) => {
+    const selectedReg = regsBySku.find((r: any) => r.registration_number === regNumber);
+    if (selectedReg) {
+      setRegForm(prev => ({
+        ...prev,
+        registration_number: regNumber,
+        registration_status: selectedReg.registration_status || 'Active',
+        registration_issue_date: selectedReg.registration_issue_date
+          ? selectedReg.registration_issue_date.split('T')[0]
+          : '',
+        registration_expiry_date: selectedReg.registration_expiry_date
+          ? selectedReg.registration_expiry_date.split('T')[0]
+          : '',
+        remarks: selectedReg.remarks || '',
+      }));
+    } else {
+      setRegForm(prev => ({ ...prev, registration_number: regNumber }));
+    }
+  };
+
 
   const fetchDashboard = async () => {
     try {
@@ -92,12 +150,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       });
       setRegMsg('✅ Registration added successfully!');
       setRegForm({ country: '', sku: '', registration_number: '', registration_status: 'Active', registration_issue_date: '', registration_expiry_date: '', remarks: '' });
+      setFilteredSkus([]);
+      setRegsBySku([]);
+      setSelectedSkuProduct(null);
       setTimeout(() => { setRegMsg(''); setShowRegForm(false); }, 2500);
     } catch (err: any) {
       setRegMsg('❌ ' + (err.response?.data?.detail || 'Error adding registration'));
     } finally {
       setRegSubmitting(false);
     }
+  };
+
+  const handleRegFormCancel = () => {
+    setShowRegForm(false);
+    setRegForm({ country: '', sku: '', registration_number: '', registration_status: 'Active', registration_issue_date: '', registration_expiry_date: '', remarks: '' });
+    setFilteredSkus([]);
+    setRegsBySku([]);
+    setSelectedSkuProduct(null);
+    setRegMsg('');
   };
 
   const getStatusClass = (status: string) => {
@@ -272,12 +342,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
           <div style={panelHeader}>
             <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#1a237e' }}>📋 Registration Management</h2>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                className="submit-button"
-                onClick={() => setShowRegForm(!showRegForm)}
-              >
-                {showRegForm ? '✕ Cancel' : '+ Add Registration'}
-              </button>
               <button className="nav-button" onClick={() => navigate('/registrations')}>
                 View All Registrations
               </button>
@@ -287,30 +351,54 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
           {showRegForm && (
             <form onSubmit={handleRegSubmit}>
               <div style={grid2}>
+
+                {/* ── Step 1: Country Dropdown ── */}
                 <div style={fld}>
                   <label style={lbl}>Country *</label>
-                  <input style={inp} type="text" required
-                    value={regForm.country}
-                    onChange={e => setRegForm({ ...regForm, country: e.target.value })}
-                    placeholder="e.g. Kenya" />
-                </div>
-                <div style={fld}>
-                  <label style={lbl}>SKU *</label>
-                  <select style={inp} required value={regForm.sku}
-                    onChange={e => setRegForm({ ...regForm, sku: e.target.value })}>
-                    <option value="">— Select SKU —</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.sku_code}>{p.sku_code} – {p.product_name}</option>
+                  <select style={inp} required value={regForm.country}
+                    onChange={e => handleRegCountryChange(e.target.value)}>
+                    <option value="">— Select Country —</option>
+                    {regCountries.map(c => (
+                      <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
                 </div>
+
+                {/* ── Step 2: SKU Dropdown (filtered by country) ── */}
+                <div style={fld}>
+                  <label style={lbl}>SKU *</label>
+                  <select style={inp} required value={regForm.sku}
+                    onChange={e => handleRegSkuChange(e.target.value)}
+                    disabled={!regForm.country}>
+                    <option value="">— Select SKU —</option>
+                    {filteredSkus.map((p: any) => (
+                      <option key={p.sku_code} value={p.sku_code}>{p.sku_code} – {p.product_name}</option>
+                    ))}
+                  </select>
+                  {regForm.country && filteredSkus.length === 0 && (
+                    <small style={{ color: '#94a3b8', fontSize: '0.75rem' }}>No products found for this country</small>
+                  )}
+                </div>
+
+                {/* ── Step 3: Registration Number Dropdown (filtered by SKU) ── */}
                 <div style={fld}>
                   <label style={lbl}>Registration Number *</label>
-                  <input style={inp} type="text" required
-                    value={regForm.registration_number}
-                    onChange={e => setRegForm({ ...regForm, registration_number: e.target.value })}
-                    placeholder="e.g. REG-2024-001" />
+                  <select style={inp} required value={regForm.registration_number}
+                    onChange={e => handleRegNumberChange(e.target.value)}
+                    disabled={!regForm.sku}>
+                    <option value="">— Select Registration Number —</option>
+                    {regsBySku.map((r: any) => (
+                      <option key={r.id} value={r.registration_number}>
+                        {r.registration_number} ({r.country})
+                      </option>
+                    ))}
+                  </select>
+                  {regForm.sku && regsBySku.length === 0 && (
+                    <small style={{ color: '#94a3b8', fontSize: '0.75rem' }}>No registrations found for this SKU</small>
+                  )}
                 </div>
+
+                {/* ── Auto-filled: Registration Status ── */}
                 <div style={fld}>
                   <label style={lbl}>Registration Status</label>
                   <select style={inp} value={regForm.registration_status}
@@ -320,12 +408,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                     <option value="Expired">Expired</option>
                   </select>
                 </div>
+
+                {/* ── Auto-filled: Issue Date ── */}
                 <div style={fld}>
                   <label style={lbl}>Issue Date</label>
                   <input style={inp} type="date"
                     value={regForm.registration_issue_date}
                     onChange={e => setRegForm({ ...regForm, registration_issue_date: e.target.value })} />
                 </div>
+
+                {/* ── Auto-filled: Expiry Date ── */}
                 <div style={fld}>
                   <label style={lbl}>Expiry Date</label>
                   <input style={inp} type="date"
@@ -333,6 +425,29 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                     onChange={e => setRegForm({ ...regForm, registration_expiry_date: e.target.value })} />
                 </div>
               </div>
+
+              {/* ── Auto-filled Product Details Card ── */}
+              {selectedSkuProduct && (
+                <div style={{
+                  background: '#f0f9ff',
+                  border: '1px solid #bae6fd',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  marginTop: '14px',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr 1fr',
+                  gap: '8px',
+                  fontSize: '0.82rem',
+                }}>
+                  <div><span style={{ fontWeight: 600, color: '#0369a1' }}>Product Name:</span><br />{selectedSkuProduct.product_name || '—'}</div>
+                  <div><span style={{ fontWeight: 600, color: '#0369a1' }}>Category:</span><br />{selectedSkuProduct.category || '—'}</div>
+                  <div><span style={{ fontWeight: 600, color: '#0369a1' }}>Pack Size:</span><br />{selectedSkuProduct.pack_size || '—'}</div>
+                  <div><span style={{ fontWeight: 600, color: '#0369a1' }}>Batch Size:</span><br />{selectedSkuProduct.standard_batch_size || '—'}</div>
+                  <div><span style={{ fontWeight: 600, color: '#0369a1' }}>MOQ:</span><br />{selectedSkuProduct.moq || '—'}</div>
+                  <div><span style={{ fontWeight: 600, color: '#0369a1' }}>Artwork Status:</span><br />{selectedSkuProduct.artwork_status || '—'}</div>
+                </div>
+              )}
+
               <div style={{ ...fld, marginTop: '14px' }}>
                 <label style={lbl}>Remarks</label>
                 <textarea style={{ ...inp, resize: 'vertical' }} rows={2}
@@ -349,7 +464,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                 <button type="submit" className="submit-button" disabled={regSubmitting}>
                   {regSubmitting ? 'Saving…' : '✅ Save Registration'}
                 </button>
-                <button type="button" className="nav-button" onClick={() => setShowRegForm(false)}>Cancel</button>
+                <button type="button" className="nav-button" onClick={handleRegFormCancel}>Cancel</button>
               </div>
             </form>
           )}

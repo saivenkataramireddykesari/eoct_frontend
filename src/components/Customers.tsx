@@ -19,20 +19,28 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
     agreement_validity: '',
   });
 
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(15);
+  const [hasMore, setHasMore] = useState(true);
+
   useEffect(() => {
-    fetchCustomers();
+    fetchCustomers(1);
   }, []);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = async (p: number = page) => {
     try {
-      const response = await customerAPI.getCustomers();
+      setLoading(true);
+      const skip = (p - 1) * pageSize;
+      const response = await customerAPI.getCustomers(skip, pageSize);
       setCustomers(response.data);
+      setHasMore(response.data.length === pageSize);
     } catch (error) {
       console.error('Error fetching customers:', error);
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,7 +166,31 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
             No customers found
           </p>
         )}
+
+        {/* Pagination Controls */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <button 
+            className="nav-button" 
+            disabled={page === 1 || loading} 
+            onClick={() => { const newPage = page - 1; setPage(newPage); fetchCustomers(newPage); }}
+            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            ← Previous
+          </button>
+          <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
+            Page {page}
+          </span>
+          <button 
+            className="nav-button" 
+            disabled={!hasMore || loading} 
+            onClick={() => { const newPage = page + 1; setPage(newPage); fetchCustomers(newPage); }}
+            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            Next →
+          </button>
+        </div>
       </div>
+
 
       {/* Add Customer Modal */}
       {showModal && (

@@ -9,11 +9,12 @@ interface RegistrationsProps {
 
 const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   const [registrations, setRegistrations] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]); // All products
-  const [filteredSkus, setFilteredSkus] = useState<any[]>([]); // SKUs filtered by country
-  const [countries, setCountries] = useState<string[]>([]); // List of countries
+  const [filteredSkus, setFilteredSkus] = useState<any[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     country: '',
     sku: '',
@@ -24,45 +25,31 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
     remarks: '',
   });
 
-  useEffect(() => {
-    fetchData();
-    fetchCountries();
-  }, []);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(15);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    if (formData.country) {
-      filterProductsByCountry(formData.country);
-    } else {
-      setFilteredSkus([]); // Clear SKUs if no country selected
-    }
-  }, [formData.country, products]); // Re-run when country or all products change
+    fetchData(1);
+    fetchCountries();
+  }, []);
 
   const fetchCountries = async () => {
     try {
       const response = await registrationAPI.getCountries();
-      console.log('API Response for Countries:', response);
-      setCountries(response.data.countries);
-      console.log('Countries state after update:', response.data.countries);
+      setCountries(response.data.countries || []);
     } catch (error) {
       console.error('Error fetching countries:', error);
     }
   };
 
-  const filterProductsByCountry = async (country: string) => {
+  const fetchData = async (p: number = page) => {
     try {
-      const response = await productAPI.getProductsByCountry(country);
-      setFilteredSkus(response.data);
-    } catch (error) {
-      console.error(`Error fetching products for ${country}:`, error);
-      setFilteredSkus([]);
-    }
-  };
-
-  const fetchData = async () => {
-    try {
-      const regRes = await registrationAPI.getRegistrations();
+      setLoading(true);
+      const skip = (p - 1) * pageSize;
+      const regRes = await registrationAPI.getRegistrations(skip, pageSize);
       setRegistrations(regRes.data);
-      // No initial product fetching, as it will be dynamic based on country
+      setHasMore(regRes.data.length === pageSize);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -70,13 +57,42 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
     }
   };
 
-  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+
+  // Country change → immediately load SKUs for that country and reset SKU
+  const handleCountryChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const country = e.target.value;
-    setFormData(prev => ({ ...prev, country: country, sku: '' })); // Reset SKU when country changes
+    setFormData(prev => ({ ...prev, country, sku: '' }));
+    setFilteredSkus([]);
+    setFormError('');
+    if (country) {
+      try {
+        const response = await productAPI.getProductsByCountry(country);
+        setFilteredSkus(response.data);
+      } catch (error) {
+        console.error(`Error fetching products for ${country}:`, error);
+        setFilteredSkus([]);
+      }
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      country: '',
+      sku: '',
+      registration_number: '',
+      registration_status: 'Active',
+      registration_issue_date: '',
+      registration_expiry_date: '',
+      remarks: '',
+    });
+    setFilteredSkus([]);
+    setFormError('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
+    setSubmitting(true);
     try {
       await registrationAPI.createRegistration({
         ...formData,
@@ -84,21 +100,16 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
         registration_expiry_date: formData.registration_expiry_date || null,
       });
       setShowModal(false);
+      resetForm();
       fetchData();
-      setFormData({
-        country: '',
-        sku: '',
-        registration_number: '',
-        registration_status: 'Active',
-        registration_issue_date: '',
-        registration_expiry_date: '',
-        remarks: '',
-      });
-    } catch (error) {
-      console.error('Error creating registration:', error);
-      alert('Error creating registration');
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || 'Error creating registration';
+      setFormError(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
+
 
   const getStatusClass = (status: string) => {
     switch (status) {
@@ -272,14 +283,59 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
             No registrations found
           </p>
         )}
+
+        {/* Pagination Controls */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <button 
+            className="nav-button" 
+            disabled={page === 1 || loading} 
+            onClick={() => { const newPage = page - 1; setPage(newPage); fetchData(newPage); }}
+            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            ← Previous
+          </button>
+          <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
+            Page {page}
+          </span>
+          <button 
+            className="nav-button" 
+            disabled={!hasMore || loading} 
+            onClick={() => { const newPage = page + 1; setPage(newPage); fetchData(newPage); }}
+            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            Next →
+          </button>
+        </div>
       </div>
+
 
       {/* Add Registration Modal */}
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={() => { setShowModal(false); resetForm(); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Add New Registration</h2>
             <form onSubmit={handleSubmit}>
+
+              {/* ── Inline Error Banner ── */}
+              {formError && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '7px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  color: '#dc2626',
+                  fontWeight: 600,
+                  fontSize: '0.88rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}>
+                  ⚠️ {formError}
+                </div>
+              )}
+
+              {/* ── Step 1: Country Dropdown ── */}
               <div className="form-group">
                 <label>Country *</label>
                 <select
@@ -287,38 +343,46 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                   onChange={handleCountryChange}
                   required
                 >
-                  <option value="">Select Country</option>
+                  <option value="">— Select Country —</option>
                   {countries.map((country) => (
-                    <option key={country} value={country}>
-                      {country}
-                    </option>
+                    <option key={country} value={country}>{country}</option>
                   ))}
                 </select>
               </div>
 
+              {/* ── Step 2: SKU Dropdown (filtered by country) ── */}
               <div className="form-group">
                 <label>SKU *</label>
                 <select
                   value={formData.sku}
-                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                  onChange={(e) => { setFormData({ ...formData, sku: e.target.value }); setFormError(''); }}
                   required
+                  disabled={!formData.country}
+                  style={{ opacity: !formData.country ? 0.5 : 1 }}
                 >
-                  <option value="">Select SKU</option>
+                  <option value="">— Select SKU —</option>
                   {filteredSkus.map((product) => (
                     <option key={product.sku_code} value={product.sku_code}>
                       {product.sku_code} - {product.product_name}
                     </option>
                   ))}
                 </select>
+                {formData.country && filteredSkus.length === 0 && (
+                  <small style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
+                    No products found for this country
+                  </small>
+                )}
               </div>
 
+              {/* ── Registration Number ── */}
               <div className="form-group">
                 <label>Registration Number *</label>
                 <input
                   type="text"
                   value={formData.registration_number}
-                  onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
+                  onChange={(e) => { setFormData({ ...formData, registration_number: e.target.value }); setFormError(''); }}
                   required
+                  placeholder="e.g. REG-2024-001"
                 />
               </div>
 
@@ -362,8 +426,14 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button type="submit" className="submit-button">Add Registration</button>
-                <button type="button" className="nav-button" onClick={() => setShowModal(false)}>
+                <button type="submit" className="submit-button" disabled={submitting}>
+                  {submitting ? 'Saving…' : 'Add Registration'}
+                </button>
+                <button
+                  type="button"
+                  className="nav-button"
+                  onClick={() => { setShowModal(false); resetForm(); }}
+                >
                   Cancel
                 </button>
               </div>

@@ -41,22 +41,30 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     artwork_status: 'Not Available',
   });
 
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(15);
+  const [hasMore, setHasMore] = useState(true);
+
   const isRegulatory = user?.department === 'Regulatory';
 
   useEffect(() => {
-    fetchProducts();
+    fetchProducts(1);
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (p: number = page) => {
     try {
-      const response = await productAPI.getProducts();
+      setLoading(true);
+      const skip = (p - 1) * pageSize;
+      const response = await productAPI.getProducts(skip, pageSize);
       setProducts(response.data);
+      setHasMore(response.data.length === pageSize);
     } catch (error) {
       console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -475,7 +483,31 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
             No products found
           </p>
         )}
+
+        {/* Pagination Controls */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <button 
+            className="nav-button" 
+            disabled={page === 1 || loading} 
+            onClick={() => { const newPage = page - 1; setPage(newPage); fetchProducts(newPage); }}
+            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            ← Previous
+          </button>
+          <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
+            Page {page}
+          </span>
+          <button 
+            className="nav-button" 
+            disabled={!hasMore || loading} 
+            onClick={() => { const newPage = page + 1; setPage(newPage); fetchProducts(newPage); }}
+            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            Next →
+          </button>
+        </div>
       </div>
+
 
       {/* Add Product Modal — hidden for Regulatory */}
       {showModal && isRegulatory && (

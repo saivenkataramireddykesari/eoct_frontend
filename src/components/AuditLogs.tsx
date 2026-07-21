@@ -10,21 +10,28 @@ interface AuditLogsProps {
 const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(15);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    fetchLogs();
+    fetchLogs(1);
   }, []);
 
-  const fetchLogs = async () => {
+  const fetchLogs = async (p: number = page) => {
     try {
-      const response = await auditAPI.getAuditLogs();
+      setLoading(true);
+      const skip = (p - 1) * pageSize;
+      const response = await auditAPI.getAuditLogs(undefined, skip, pageSize);
       setLogs(response.data);
+      setHasMore(response.data.length === pageSize);
     } catch (error) {
       console.error('Error fetching audit logs:', error);
     } finally {
       setLoading(false);
     }
   };
+
 
   const getActionColor = (action: string) => {
     if (action.includes('CREATE')) return '#4caf50';
@@ -159,9 +166,33 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
             No audit logs found
           </p>
         )}
+
+        {/* Pagination Controls */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <button 
+            className="nav-button" 
+            disabled={page === 1 || loading} 
+            onClick={() => { const newPage = page - 1; setPage(newPage); fetchLogs(newPage); }}
+            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            ← Previous
+          </button>
+          <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
+            Page {page}
+          </span>
+          <button 
+            className="nav-button" 
+            disabled={!hasMore || loading} 
+            onClick={() => { const newPage = page + 1; setPage(newPage); fetchLogs(newPage); }}
+            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+          >
+            Next →
+          </button>
+        </div>
       </div>
     </div>
   );
 };
+
 
 export default AuditLogs;

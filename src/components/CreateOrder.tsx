@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { orderAPI, customerAPI, productAPI } from '../services/api';
+import { orderAPI, customerAPI, productAPI, Customer } from '../services/api';
 import Header from './Header';
 import ProductItem from './ProductItem';
 
@@ -12,16 +12,18 @@ interface CreateOrderProps {
   onLogout: () => void;
 }
 
-/* ── Generate PO Number: first3(country) + first3(customer) + MMYY from selected PO date ── */
-const generatePoNumber = (country: string, customerName: string, poDateStr: string): string => {
+/* ── Generate PO Number: first3(country) + first3(customer) + MMYY from selected PO date + serial ── */
+const generatePoNumber = (country: string, customerName: string, poDateStr: string, orderCount: number = 0): string => {
   const c  = country.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
   const k  = customerName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
   // Use selected PO date if available, otherwise today
   const d  = poDateStr ? new Date(poDateStr) : new Date();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yy = String(d.getFullYear()).slice(-2);
-  return `${c}-${k}-${mm}/${yy}`;
+  const serial = orderCount + 1;
+  return `${c}-${k}-${mm}/${yy}-${serial}`;
 };
+
 
 const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -37,9 +39,11 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
   const [countries, setCountries]                 = useState<string[]>([]);
   const [customerProducts, setCustomerProducts]   = useState<any[]>([]); // New state for products of selected customer
+  const [selectedCustomerOrderCount, setSelectedCustomerOrderCount] = useState(0);
   const [loading, setLoading]                     = useState(false);
   const [error, setError]                         = useState('');
   const [success, setSuccess]                     = useState('');
+
 
   /* ── Order state ── */
   const [country, setCountry]       = useState('');
@@ -75,7 +79,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     totalPrice: number; // Calculated field
   }
 
-  const generateEmptyProduct = (): OrderProduct => ({
+  const generateEmptyProduct = (defaultArtworkStatus: string = 'Not Available'): OrderProduct => ({
     id: Date.now().toString(), // Unique ID for keying
     skuCode: '',
     productName: '',
@@ -83,7 +87,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     packSize: '',
     batchSize: '',
     moq: '',
-    artworkStatus: 'Not Available',
+    artworkStatus: defaultArtworkStatus,
     pmCode: '',
     salesQty: '',
     freeQty: '',
@@ -92,14 +96,14 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     totalPrice: 0,
   });
 
-  const [products, setProducts] = useState<OrderProduct[]>([generateEmptyProduct()]);
+  const [products, setProducts] = useState<OrderProduct[]>([generateEmptyProduct('Not Available')]);
 
 
   /* ── Product state ── */
 
 
   const handleAddProduct = () => {
-    setProducts([...products, generateEmptyProduct()]);
+    setProducts([...products, generateEmptyProduct(products[0]?.artworkStatus || 'Not Available')]);
   };
 
   const handleRemoveProduct = (id: string) => {
@@ -139,7 +143,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     setPoNumber('');
     setFilteredCustomers([]);
     setCustomerProducts([]); // Clear customer products
-    setProducts([generateEmptyProduct()]); // Clear and reset products
+    setProducts([generateEmptyProduct('Not Available')]); // Clear and reset products
 
     if (val) {
       customerAPI.getCustomersByCountry(val).then(res => {
@@ -154,29 +158,65 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   /* auto-generate PO number + fetch products when customer is picked */
   const handleCustomerChange = (id: string) => {
     setCustomerId(id);
-    setProducts([generateEmptyProduct()]); // Clear and reset products
+    setProducts([generateEmptyProduct('Not Available')]); // Clear and reset products
 
     const cust = filteredCustomers.find((c: any) => String(c.id) === id);
     if (cust) {
       setCustomerName(cust.customer_name);
-      // Only generate PO number if PO date is already set
-      if (poDate) {
-        setPoNumber(generatePoNumber(country, cust.customer_name, poDate));
-      } else {
-        setPoNumber(''); // Will be generated once PO date is chosen
-      }
 
-      // Fetch products for the selected customer
-      customerAPI.getProductsForCustomer(parseInt(id)).then(res => {
-        setCustomerProducts(res.data);
+      // Fetch customer details to get order_type, default_artwork_status, order_count, category
+      customerAPI.getCustomer(parseInt(id)).then(customerDetails => {
+        const orderCount = customerDetails.data.order_count || 0;
+        setSelectedCustomerOrderCount(orderCount);
+
+        if (customerDetails.data.order_type) {
+          setOrderType(customerDetails.data.order_type); // Auto-select order type
+        }
+
+        if (customerDetails.data.category) {
+          setOrderCategory(customerDetails.data.category); // Auto-select category
+        }
+
+        // Only generate PO number if PO date is already set
+        if (poDate) {
+          setPoNumber(generatePoNumber(country, cust.customer_name, poDate, orderCount));
+        } else {
+          setPoNumber(''); // Will be generated once PO date is chosen
+        }
+
+        const defaultArtwork = customerDetails.data.default_artwork_status || 'Not Available';
+
+        // Fetch products for the selected customer
+        customerAPI.getProductsForCustomer(parseInt(id)).then(res => {
+          setCustomerProducts(res.data);
+
+          // Update the artworkStatus for the initially empty product if a default is available
+          // This assumes a new product item is generated with generateEmptyProduct() which can then be updated
+          setProducts(prevProducts => prevProducts.map(p => {
+            if (p.skuCode === '') { // Assuming the first empty product needs this default
+              return { ...p, artworkStatus: defaultArtwork };
+            }
+            return p;
+          }));
+
+        }).catch(err => {
+          console.error('Error fetching products for customer:', err);
+          setError('Failed to load products for selected customer.');
+        });
+
       }).catch(err => {
-        console.error('Error fetching products for customer:', err);
-        setError('Failed to load products for selected customer.');
+        console.error('Error fetching customer details for order defaults:', err);
+        setError('Failed to load order defaults for selected customer.');
       });
+
     } else {
       setCustomerName('');
       setPoNumber('');
+      setSelectedCustomerOrderCount(0);
       setCustomerProducts([]);
+      setOrderType('PNS'); // Reset to default
+      setOrderCategory(''); // Reset to default
+      setProducts([generateEmptyProduct()]); // Clear and reset products
     }
   };
 
@@ -184,9 +224,10 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const handlePoDateChange = (val: string) => {
     setPoDate(val);
     if (val && customerId && customerName) {
-      setPoNumber(generatePoNumber(country, customerName, val));
+      setPoNumber(generatePoNumber(country, customerName, val, selectedCustomerOrderCount));
     }
   };
+
 
 
 

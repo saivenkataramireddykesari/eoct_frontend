@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { customerAPI } from '../services/api';
+import { customerAPI, Customer } from '../services/api';
 
 interface User {
   id: number;
@@ -8,13 +8,6 @@ interface User {
   email: string;
   department: string;
   role: string;
-}
-
-interface Customer {
-  id: number;
-  name: string;
-  country: string;
-  // Add other customer properties as needed
 }
 
 interface RegulatoryCustomersProps {
@@ -46,9 +39,16 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
     }
   };
 
-  const handleAddCustomer = async (newCustomerData: Omit<Customer, 'id'>) => {
+  const handleAddCustomer = async (newCustomerData: { customer_name: string; country: string; }) => {
     try {
-      await customerAPI.createCustomer(newCustomerData);
+      const customerToCreate = {
+        customer_name: newCustomerData.customer_name,
+        country: newCustomerData.country,
+        payment_terms: null,
+        agreement_status: "Pending",
+        agreement_validity: null,
+      };
+      await customerAPI.createCustomer(customerToCreate);
       setShowAddModal(false);
       fetchCustomers(); // Refresh the list
     } catch (err) {
@@ -57,15 +57,26 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
     }
   };
 
-  const handleEditCustomer = async (id: number, updatedCustomerData: Customer) => {
+  const handleEditCustomer = async (id: number, updatedFields: { customer_name: string; country: string; }) => {
     try {
       // Assuming there's an updateCustomer API in customerAPI
       // await customerAPI.updateCustomer(id, updatedCustomerData);
       // Since customerAPI doesn't have a direct updateCustomer, we'd need to add one or use a more generic approach if available
-      console.warn("Update Customer API not implemented in customerAPI. Assuming successful update for now.");
+      console.warn("Update Customer API not implemented in customerAPI. Simulating update for now.");
+      
+      // In a real scenario, you would make an API call like:
+      // await customerAPI.updateCustomer(id, updatedFields);
+
+      // For now, let's manually update the state to reflect the change visually
+      setCustomers(prevCustomers =>
+        prevCustomers.map(cust =>
+          cust.id === id ? { ...cust, ...updatedFields } : cust
+        )
+      );
+
       setShowEditModal(false);
       setEditingCustomer(null);
-      fetchCustomers(); // Refresh the list
+      // fetchCustomers(); // Refresh the list - uncomment if actual API call is made
     } catch (err) {
       setError('Failed to update customer.');
       console.error(err);
@@ -104,7 +115,7 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
             {customers.map((customer) => (
               <tr key={customer.id}>
                 <td>{customer.id}</td>
-                <td>{customer.name}</td>
+                <td>{customer.customer_name}</td>
                 <td>{customer.country}</td>
                 <td>
                   <button onClick={() => {
@@ -128,7 +139,7 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
       {showEditModal && editingCustomer && (
         <CustomerForm
           initialData={editingCustomer}
-          onSubmit={(data) => handleEditCustomer(editingCustomer.id, { ...editingCustomer, ...data })}
+          onSubmit={(data) => handleEditCustomer(editingCustomer.id, { ...editingCustomer, customer_name: data.customer_name, country: data.country })}
           onCancel={() => {
             setShowEditModal(false);
             setEditingCustomer(null);
@@ -143,18 +154,18 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
 
 // Placeholder for a generic CustomerForm component
 interface CustomerFormProps {
-  initialData?: Omit<Customer, 'id'>;
-  onSubmit: (data: Omit<Customer, 'id'>) => void;
+  initialData?: { customer_name: string; country: string; };
+  onSubmit: (data: { customer_name: string; country: string; }) => void;
   onCancel: () => void;
 }
 
 const CustomerForm: React.FC<CustomerFormProps> = ({ initialData, onSubmit, onCancel }) => {
-  const [name, setName] = useState(initialData?.name || '');
+  const [customerName, setCustomerName] = useState(initialData?.customer_name || '');
   const [country, setCountry] = useState(initialData?.country || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ name, country });
+    onSubmit({ customer_name: customerName, country });
   };
 
   return (
@@ -162,8 +173,8 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ initialData, onSubmit, onCa
       <h3>{initialData ? 'Edit Customer' : 'Add New Customer'}</h3>
       <form onSubmit={handleSubmit}>
         <div>
-          <label>Name:</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+          <label>Customer Name:</label>
+          <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
         </div>
         <div>
           <label>Country:</label>
