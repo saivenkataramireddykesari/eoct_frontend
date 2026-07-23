@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'https://eoct-backend.onrender.com/api';
+const API_URL = 'http://localhost:8000/api';
 
 // https://eoct-backend.onrender.com
 
@@ -42,6 +42,8 @@ export const orderAPI = {
   canApproveOrder: (id: number) => api.get(`/orders/${id}/can-approve`),
   updateMilestone: (milestoneId: number, data: any) =>
     api.put(`/milestones/${milestoneId}`, data),
+  setBulkTargetDates: (orderId: number, milestones: Array<{ milestone_id: number; target_date: string | null }>) =>
+    api.post(`/orders/${orderId}/milestones/target-dates`, { milestones }),
   getMilestoneHistory: (milestoneId: number) => api.get(`/milestones/${milestoneId}/history`),
 };
 
@@ -56,6 +58,8 @@ export const productAPI = {
   requestPmCode: (sku: string) => api.post(`/products/${sku}/pm-requests`),
   submitPmCode: (requestId: number, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string, remarks?: string) => api.post(`/products/pm-requests/${requestId}/submit`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, remarks }),
   decidePmCode: (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string) => api.post(`/products/pm-requests/${requestId}/decide`, { decision, remarks }),
+  getCategories: () => api.get('/categories'),
+  getCountries: () => api.get('/countries'),
 };
 
 // Customer APIs

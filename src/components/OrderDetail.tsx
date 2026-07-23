@@ -34,6 +34,34 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     remarks: '',
   });
   const [milestoneHistory, setMilestoneHistory] = useState<any[]>([]);
+  const [bulkTargetModal, setBulkTargetModal] = useState(false);
+  const [bulkTargetDates, setBulkTargetDates] = useState<{ [milestoneId: number]: string }>({});
+
+  const openBulkTargetModal = () => {
+    const initialDates: { [key: number]: string } = {};
+    (order?.milestones || []).forEach((m: any) => {
+      initialDates[m.id] = m.target_date ? m.target_date.split('T')[0] : '';
+    });
+    setBulkTargetDates(initialDates);
+    setBulkTargetModal(true);
+  };
+
+  const handleBulkTargetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const milestonesPayload = (order?.milestones || []).map((m: any) => ({
+        milestone_id: m.id,
+        target_date: bulkTargetDates[m.id] || null,
+      }));
+      await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
+      setBulkTargetModal(false);
+      fetchOrder();
+    } catch (error: any) {
+      console.error('Error saving bulk target dates:', error);
+      alert(error.response?.data?.detail || 'Failed to save milestone target dates');
+    }
+  };
+
 
   useEffect(() => {
     fetchOrder();
@@ -578,7 +606,19 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
         {/* Milestones Section */}
         <div style={{ marginTop: '30px' }}>
-          <h3>Execution Milestones</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <h3 style={{ margin: 0 }}>Execution Milestones</h3>
+            {user.department === 'Regulatory' && (
+              <button
+                className="submit-button"
+                style={{ background: '#3f51b5', borderColor: '#3f51b5' }}
+                onClick={openBulkTargetModal}
+              >
+                📅 Set Target Dates (All Milestones)
+              </button>
+            )}
+          </div>
+
           
           {['Artwork', 'SCM', 'Logistics'].map((category) => (
             <div key={category} style={{ marginBottom: '20px' }}>
@@ -600,7 +640,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                       ?.filter((m: any) => m.category === category)
                       .map((milestone: any) => (
                         <tr key={milestone.id}>
-                          <td>{milestone.name}</td>
+                          <td>{milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name}</td>
                           <td>
                             <span className={`status-badge ${getStatusClass(milestone.status)}`}>
                               {milestone.status}
@@ -638,7 +678,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                     <div key={milestone.id} className="mobile-card">
                       <div className="mobile-card-row">
                         <span className="mobile-card-label">Milestone</span>
-                        <span className="mobile-card-value">{milestone.name}</span>
+                        <span className="mobile-card-value">{milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name}</span>
                       </div>
                       <div className="mobile-card-row">
                         <span className="mobile-card-label">Status</span>
@@ -852,7 +892,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
       {milestoneModal && selectedMilestone && (
         <div className="modal-overlay" onClick={() => setMilestoneModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Update Milestone: {selectedMilestone.name}</h2>
+            <h2>Update Milestone: {selectedMilestone.name === 'PM Procurement Released' ? 'PO Released' : selectedMilestone.name}</h2>
             <form onSubmit={handleMilestoneSubmit}>
               <div className="form-group">
                 <label>Status</label>
@@ -921,6 +961,61 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="submit" className="submit-button">Update</button>
                 <button type="button" className="nav-button" onClick={() => setMilestoneModal(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Target Dates Modal for Regulatory Department */}
+      {bulkTargetModal && (
+        <div className="modal-overlay" onClick={() => setBulkTargetModal(false)}>
+          <div className="modal" style={{ maxWidth: '700px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <h2>📅 Set Milestone Target Dates — Order: {order?.order_number}</h2>
+            <p style={{ color: '#666', fontSize: '0.9em', marginBottom: '20px' }}>
+              Set target dates for each execution milestone for this order. Click Save Target Dates when done.
+            </p>
+            <form onSubmit={handleBulkTargetSubmit}>
+              <div style={{ maxHeight: '420px', overflowY: 'auto', paddingRight: '10px' }}>
+                {['Artwork', 'SCM', 'Logistics'].map((category) => {
+                  const catMilestones = (order?.milestones || []).filter((m: any) => m.category === category);
+                  if (catMilestones.length === 0) return null;
+                  return (
+                    <div key={category} style={{ marginBottom: '20px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <h4 style={{ margin: '0 0 10px 0', color: '#1e293b', borderBottom: '2px solid #cbd5e1', paddingBottom: '4px' }}>
+                        {category} Milestones
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {catMilestones.map((m: any) => (
+                          <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px' }}>
+                            <div style={{ flex: 1 }}>
+                              <strong>{m.name === 'PM Procurement Released' ? 'PO Released' : m.name}</strong>
+                              <span className={`status-badge ${getStatusClass(m.status)}`} style={{ marginLeft: '8px', fontSize: '0.75em' }}>
+                                {m.status}
+                              </span>
+                            </div>
+                            <div style={{ width: '180px' }}>
+                              <input
+                                type="date"
+                                value={bulkTargetDates[m.id] || ''}
+                                onChange={(e) => setBulkTargetDates({ ...bulkTargetDates, [m.id]: e.target.value })}
+                                style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #ccc' }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
+                <button type="submit" className="submit-button" style={{ background: '#3f51b5', borderColor: '#3f51b5' }}>
+                  Save Target Dates
+                </button>
+                <button type="button" className="nav-button" onClick={() => setBulkTargetModal(false)}>
                   Cancel
                 </button>
               </div>

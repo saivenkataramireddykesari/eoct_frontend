@@ -7,23 +7,33 @@ interface ProductsProps {
   onLogout: () => void;
 }
 
+const DEFAULT_CATEGORIES = ["Drug", "Nutra", "Excipient"];
+
 const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string; secondaryPmCode: string; leafPmCode: string } | null>(null);
+  const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string } | null>(null);
   const [primaryPmCodeInput, setPrimaryPmCodeInput] = useState('');
-  const [secondaryPmCodeInput, setSecondaryPmCodeInput] = useState('');
-  const [leafPmCodeInput, setLeafPmCodeInput] = useState('');
   
+  // Dropdown options from database & defaults
+  const [countries, setCountries] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+
   // PM Code Request workflow states
   const [historyModal, setHistoryModal] = useState<any | null>(null);
   const [rejectModal, setRejectModal] = useState<{ requestId: number } | null>(null);
   const [rejectRemarks, setRejectRemarks] = useState('');
   const [artworkSubmitModal, setArtworkSubmitModal] = useState<{ requestId: number; sku: string } | null>(null);
-  const [artworkPmCode, setArtworkPmCode] = useState('');
+  const [secondaryPmCodeInput, setSecondaryPmCodeInput] = useState('');
+  const [leafPmCodeInput, setLeafPmCodeInput] = useState('');
   const [artworkRemarks, setArtworkRemarks] = useState('');
-  const [acceptModal, setAcceptModal] = useState<{ requestId: number; primaryPmCode: string; secondaryPmCode: string; leafPmCode: string } | null>(null);
+  const [acceptModal, setAcceptModal] = useState<{
+    requestId: number;
+    primaryPmCode: string;
+    secondaryPmCode: string;
+    leafPmCode: string;
+  } | null>(null);
   const [acceptRemarks, setAcceptRemarks] = useState('');
 
   const [formData, setFormData] = useState({
@@ -36,8 +46,6 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     standard_batch_size: '',
     moq: '',
     primary_pm_code: '',
-    secondary_pm_code: '',
-    leaf_pm_code: '',
     artwork_status: 'Not Available',
   });
 
@@ -49,7 +57,28 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     fetchProducts(1);
+    fetchMasterData();
   }, []);
+
+  const fetchMasterData = async () => {
+    try {
+      const countryRes = await productAPI.getCountries();
+      if (countryRes.data && Array.isArray(countryRes.data.countries)) {
+        setCountries(countryRes.data.countries);
+      }
+    } catch (error) {
+      console.error('Error fetching countries:', error);
+    }
+
+    try {
+      const catRes = await productAPI.getCategories();
+      if (catRes.data && Array.isArray(catRes.data.categories)) {
+        setCategories(catRes.data.categories);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
 
   const fetchProducts = async (p: number = page) => {
     try {
@@ -65,19 +94,17 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
   };
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      console.log("Submitting product with PM Codes:", formData.primary_pm_code, formData.secondary_pm_code, formData.leaf_pm_code);
+      console.log("Submitting product with PM Code:", formData.primary_pm_code);
       await productAPI.createProduct({
         ...formData,
         standard_batch_size: parseInt(formData.standard_batch_size) || null,
         moq: parseInt(formData.moq) || null,
-        // pm_codes only sent if artwork is Available
         primary_pm_code: formData.artwork_status === 'Available' ? formData.primary_pm_code : '',
-        secondary_pm_code: formData.artwork_status === 'Available' ? formData.secondary_pm_code : '',
-        leaf_pm_code: formData.artwork_status === 'Available' ? formData.leaf_pm_code : '',
+        secondary_pm_code: '',
+        leaf_pm_code: '',
         current_artwork_version: '',
       });
       setShowModal(false);
@@ -92,8 +119,6 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
         standard_batch_size: '',
         moq: '',
         primary_pm_code: '',
-        secondary_pm_code: '',
-        leaf_pm_code: '',
         artwork_status: 'Not Available',
       });
     } catch (error) {
@@ -104,16 +129,13 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   const handlePmCodeUpdate = async () => {
     if (!pmModal) return;
-    console.log("Updating PM Codes for SKU:", pmModal.sku, "with values:", primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
     try {
-      await productAPI.updatePmCode(pmModal.sku, primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
+      await productAPI.updatePmCode(pmModal.sku, primaryPmCodeInput, '', '');
       setPmModal(null);
       setPrimaryPmCodeInput('');
-      setSecondaryPmCodeInput('');
-      setLeafPmCodeInput('');
       fetchProducts();
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Error updating PM Codes');
+      alert(error.response?.data?.detail || 'Error updating PM Code');
     }
   };
 
@@ -137,9 +159,14 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   const handleArtworkSubmit = async () => {
     if (!artworkSubmitModal || !primaryPmCodeInput.trim()) return;
-    console.log("Artwork submitting PM Codes for request:", artworkSubmitModal.requestId, "with values:", primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
     try {
-      await productAPI.submitPmCode(artworkSubmitModal.requestId, primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput, artworkRemarks);
+      await productAPI.submitPmCode(
+        artworkSubmitModal.requestId,
+        primaryPmCodeInput.trim(),
+        secondaryPmCodeInput.trim(),
+        leafPmCodeInput.trim(),
+        artworkRemarks
+      );
       setArtworkSubmitModal(null);
       setPrimaryPmCodeInput('');
       setSecondaryPmCodeInput('');
@@ -147,7 +174,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       setArtworkRemarks('');
       fetchProducts();
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Error submitting PM Codes');
+      alert(error.response?.data?.detail || 'Error submitting PM Code');
     }
   };
 
@@ -191,20 +218,18 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 <th>Pack Size</th>
                 <th>Batch Size</th>
                 <th>MOQ</th>
-                <th>Primary PM Code</th>
-                <th>Secondary PM Code</th>
-                <th>Leaf PM Code</th>
+                <th>PM Code</th>
                 <th>Artwork Status</th>
                 <th>PM Request Status</th>
                 <th>History</th>
-                {(isRegulatory || user.department === 'Artwork') && <th>Action</th>}
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {products.map((product) => {
                 const requests = product.pm_code_requests || [];
                 const latestRequest = requests[requests.length - 1];
-                const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
+                const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
                 
                 const getPmRequestStatusText = () => {
                   if (!latestRequest) return '—';
@@ -238,9 +263,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     <td>{product.pack_size}</td>
                     <td>{product.standard_batch_size}</td>
                     <td>{product.moq}</td>
-                    <td>{product.primary_pm_code || '—'}</td>
-                    <td>{product.secondary_pm_code || '—'}</td>
-                    <td>{product.leaf_pm_code || '—'}</td>
+                    <td>{product.primary_pm_code || latestRequest?.current_primary_pm_code || '—'}</td>
                     <td>
                       <span className={`status-badge ${getArtworkStatusClass(product.artwork_status)}`}>
                         {product.artwork_status}
@@ -254,65 +277,80 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       ) : '—'}
                     </td>
                     <td>
-                      {requests.length > 0 ? (
-                        <button
-                          className="nav-button"
-                          onClick={() => setHistoryModal(product)}
-                        >
-                          Show History
-                        </button>
-                      ) : '—'}
+                      <button
+                        className="nav-button"
+                        onClick={() => setHistoryModal(product)}
+                      >
+                        Show History
+                      </button>
                     </td>
-                    {(isRegulatory || user.department === 'Artwork') && (
-                      <td>
-                        {showGetPmCode && (
+                    <td>
+                      {showGetPmCode && (
+                        <button
+                          className="submit-button"
+                          onClick={() => handleRequestPmCode(product.sku_code)}
+                        >
+                          Get PM Code
+                        </button>
+                      )}
+                      {isRegulatory && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
+                        <span style={{ color: '#666', fontSize: '0.9em' }}>Awaiting Artwork</span>
+                      )}
+                      {isRegulatory && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
+                        <div style={{ display: 'flex', gap: '5px' }}>
                           <button
                             className="submit-button"
-                            onClick={() => handleRequestPmCode(product.sku_code)}
+                            style={{ background: '#4caf50', borderColor: '#4caf50', padding: '4px 8px', fontSize: '0.85em' }}
+                            onClick={() => setAcceptModal({
+                              requestId: latestRequest.id,
+                              primaryPmCode: latestRequest.current_primary_pm_code || latestRequest.current_pm_code || '',
+                              secondaryPmCode: latestRequest.current_secondary_pm_code || '',
+                              leafPmCode: latestRequest.current_leaf_pm_code || ''
+                            })}
                           >
-                            Get PM Code
+                            Accept ({latestRequest.current_primary_pm_code || latestRequest.current_pm_code})
                           </button>
-                        )}
-                        {isRegulatory && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
-                          <span style={{ color: '#666', fontSize: '0.9em' }}>Awaiting Artwork</span>
-                        )}
-                        {isRegulatory && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
-                          <div style={{ display: 'flex', gap: '5px' }}>
-                            <button
-                              className="submit-button"
-                              style={{ background: '#4caf50', borderColor: '#4caf50', padding: '4px 8px', fontSize: '0.85em' }}
-                              onClick={() => setAcceptModal({ requestId: latestRequest.id, primaryPmCode: latestRequest.current_pm_code || '', secondaryPmCode: latestRequest.secondary_pm_code || '', leafPmCode: latestRequest.leaf_pm_code || '' })}
-                            >
-                              Accept ({latestRequest.current_pm_code})
-                            </button>
-                            <button
-                              className="nav-button"
-                              style={{ background: '#f44336', borderColor: '#f44336', color: '#fff', padding: '4px 8px', fontSize: '0.85em' }}
-                              onClick={() => setRejectModal({ requestId: latestRequest.id })}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        )}
-                        {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
                           <button
-                            className="submit-button"
-                            style={{ background: '#ff9800', borderColor: '#ff9800' }}
-                            onClick={() => {
-                              setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
-                              setPrimaryPmCodeInput(product.primary_pm_code || '');
-                              setSecondaryPmCodeInput(product.secondary_pm_code || '');
-                              setLeafPmCodeInput(product.leaf_pm_code || '');
-                            }}
+                            className="nav-button"
+                            style={{ background: '#f44336', borderColor: '#f44336', color: '#fff', padding: '4px 8px', fontSize: '0.85em' }}
+                            onClick={() => setRejectModal({ requestId: latestRequest.id })}
                           >
-                            Submit PM Code
+                            Reject
                           </button>
-                        )}
-                        {user.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
-                          <span style={{ color: '#666', fontSize: '0.9em' }}>Pending Regulatory Review</span>
-                        )}
-                      </td>
-                    )}
+                        </div>
+                      )}
+                      {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
+                        <button
+                          className="submit-button"
+                          style={{ background: '#ff9800', borderColor: '#ff9800' }}
+                          onClick={() => {
+                            setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
+                            setPrimaryPmCodeInput(latestRequest.current_primary_pm_code || product.primary_pm_code || '');
+                            setSecondaryPmCodeInput(latestRequest.current_secondary_pm_code || product.secondary_pm_code || '');
+                            setLeafPmCodeInput(latestRequest.current_leaf_pm_code || product.leaf_pm_code || '');
+                          }}
+                        >
+                          Submit PM Code
+                        </button>
+                      )}
+                      {user.department === 'Artwork' && (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') && (
+                        <button
+                          className="submit-button"
+                          style={{ background: '#ff9800', borderColor: '#ff9800' }}
+                          onClick={() => {
+                            setPmModal({ sku: product.sku_code, primaryPmCode: product.primary_pm_code || '' });
+                            setPrimaryPmCodeInput(product.primary_pm_code || latestRequest?.current_primary_pm_code || '');
+                          }}
+                        >
+                          Update PM Code
+                        </button>
+                      )}
+                      {!showGetPmCode && 
+                       !(isRegulatory && latestRequest && (latestRequest.status === 'PENDING_ARTWORK' || latestRequest.status === 'AWAITING_REGULATORY_APPROVAL')) &&
+                       user.department !== 'Artwork' && (
+                        <span style={{ color: '#999' }}>—</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -325,7 +363,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
           {products.map((product) => {
             const requests = product.pm_code_requests || [];
             const latestRequest = requests[requests.length - 1];
-            const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
+            const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
             
             const getPmRequestStatusText = () => {
               if (!latestRequest) return '—';
@@ -384,16 +422,8 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   <span className="mobile-card-value">{product.moq}</span>
                 </div>
                 <div className="mobile-card-row">
-                  <span className="mobile-card-label">Primary PM Code</span>
-                  <span className="mobile-card-value">{product.primary_pm_code || '—'}</span>
-                </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Secondary PM Code</span>
-                  <span className="mobile-card-value">{product.secondary_pm_code || '—'}</span>
-                </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Leaf PM Code</span>
-                  <span className="mobile-card-value">{product.leaf_pm_code || '—'}</span>
+                  <span className="mobile-card-label">PM Code</span>
+                  <span className="mobile-card-value">{product.primary_pm_code || latestRequest?.current_primary_pm_code || '—'}</span>
                 </div>
                 <div className="mobile-card-row">
                   <span className="mobile-card-label">Artwork Status</span>
@@ -413,66 +443,78 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     ) : '—'}
                   </span>
                 </div>
-                {requests.length > 0 && (
-                  <div className="mobile-card-row" style={{ marginTop: '8px' }}>
+                <div className="mobile-card-row" style={{ marginTop: '8px' }}>
+                  <button
+                    className="nav-button"
+                    style={{ width: '100%' }}
+                    onClick={() => setHistoryModal(product)}
+                  >
+                    Show History
+                  </button>
+                </div>
+                <div className="mobile-card-row" style={{ marginTop: '8px' }}>
+                  {showGetPmCode && (
                     <button
-                      className="nav-button"
+                      className="submit-button"
                       style={{ width: '100%' }}
-                      onClick={() => setHistoryModal(product)}
+                      onClick={() => handleRequestPmCode(product.sku_code)}
                     >
-                      Show History
+                      Get PM Code
                     </button>
-                  </div>
-                )}
-                {(isRegulatory || user.department === 'Artwork') && (
-                  <div className="mobile-card-row" style={{ marginTop: '8px' }}>
-                    {showGetPmCode && (
+                  )}
+                  {isRegulatory && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
+                    <span style={{ color: '#666', fontSize: '0.9em', textAlign: 'center', width: '100%', display: 'block' }}>Awaiting Artwork</span>
+                  )}
+                  {isRegulatory && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
+                    <div style={{ display: 'flex', gap: '5px', width: '100%' }}>
                       <button
                         className="submit-button"
-                        style={{ width: '100%' }}
-                        onClick={() => handleRequestPmCode(product.sku_code)}
+                        style={{ background: '#4caf50', borderColor: '#4caf50', flex: 1, padding: '6px', fontSize: '0.85em' }}
+                        onClick={() => setAcceptModal({
+                          requestId: latestRequest.id,
+                          primaryPmCode: latestRequest.current_primary_pm_code || latestRequest.current_pm_code || '',
+                          secondaryPmCode: latestRequest.current_secondary_pm_code || '',
+                          leafPmCode: latestRequest.current_leaf_pm_code || ''
+                        })}
                       >
-                        Get PM Code
+                        Accept ({latestRequest.current_primary_pm_code || latestRequest.current_pm_code})
                       </button>
-                    )}
-                    {isRegulatory && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
-                      <span style={{ color: '#666', fontSize: '0.9em', textAlign: 'center', width: '100%', display: 'block' }}>Awaiting Artwork</span>
-                    )}
-                    {isRegulatory && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
-                      <div style={{ display: 'flex', gap: '5px', width: '100%' }}>
-                        <button
-                          className="submit-button"
-                          style={{ background: '#4caf50', borderColor: '#4caf50', flex: 1, padding: '6px', fontSize: '0.85em' }}
-                          onClick={() => setAcceptModal({ requestId: latestRequest.id, primaryPmCode: latestRequest.current_pm_code || '', secondaryPmCode: '', leafPmCode: '' })}
-                        >
-                          Accept ({latestRequest.current_pm_code})
-                        </button>
-                        <button
-                          className="nav-button"
-                          style={{ background: '#f44336', borderColor: '#f44336', color: '#fff', flex: 1, padding: '6px', fontSize: '0.85em' }}
-                          onClick={() => setRejectModal({ requestId: latestRequest.id })}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                    {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
                       <button
-                        className="submit-button"
-                        style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
-                        onClick={() => {
-                          setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
-                          setArtworkPmCode(product.pm_code || '');
-                        }}
+                        className="nav-button"
+                        style={{ background: '#f44336', borderColor: '#f44336', color: '#fff', flex: 1, padding: '6px', fontSize: '0.85em' }}
+                        onClick={() => setRejectModal({ requestId: latestRequest.id })}
                       >
-                        Submit PM Code
+                        Reject
                       </button>
-                    )}
-                    {user.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
-                      <span style={{ color: '#666', fontSize: '0.9em', textAlign: 'center', width: '100%', display: 'block' }}>Pending Regulatory Review</span>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                  {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
+                    <button
+                      className="submit-button"
+                      style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
+                      onClick={() => {
+                        setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
+                        setPrimaryPmCodeInput(latestRequest.current_primary_pm_code || product.primary_pm_code || '');
+                        setSecondaryPmCodeInput(latestRequest.current_secondary_pm_code || product.secondary_pm_code || '');
+                        setLeafPmCodeInput(latestRequest.current_leaf_pm_code || product.leaf_pm_code || '');
+                      }}
+                    >
+                      Submit PM Code
+                    </button>
+                  )}
+                  {user.department === 'Artwork' && (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') && (
+                    <button
+                      className="submit-button"
+                      style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
+                      onClick={() => {
+                        setPmModal({ sku: product.sku_code, primaryPmCode: product.primary_pm_code || '' });
+                        setPrimaryPmCodeInput(product.primary_pm_code || latestRequest?.current_primary_pm_code || '');
+                      }}
+                    >
+                      Update PM Code
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -509,7 +551,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       </div>
 
 
-      {/* Add Product Modal — hidden for Regulatory */}
+      {/* Add Product Modal — for Regulatory */}
       {showModal && isRegulatory && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -522,6 +564,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   value={formData.sku_code}
                   onChange={(e) => setFormData({ ...formData, sku_code: e.target.value })}
                   required
+                  placeholder="e.g. SKU-101"
                 />
               </div>
 
@@ -532,25 +575,36 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   value={formData.product_name}
                   onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
                   required
+                  placeholder="e.g. Paracetamol 500mg"
                 />
               </div>
 
               <div className="form-group">
-                <label>Category</label>
-                <input
-                  type="text"
+                <label>Category *</label>
+                <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                />
+                  required
+                >
+                  <option value="">— Select Category —</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
-                <label>Country</label>
-                <input
-                  type="text"
+                <label>Country *</label>
+                <select
                   value={formData.country}
                   onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                />
+                  required
+                >
+                  <option value="">— Select Country —</option>
+                  {countries.map((country) => (
+                    <option key={country} value={country}>{country}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group">
@@ -559,6 +613,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   type="text"
                   value={formData.customer}
                   onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
+                  placeholder="e.g. Acme Pharma"
                 />
               </div>
 
@@ -568,6 +623,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   type="text"
                   value={formData.pack_size}
                   onChange={(e) => setFormData({ ...formData, pack_size: e.target.value })}
+                  placeholder="e.g. 10x10 Strips"
                 />
               </div>
 
@@ -577,6 +633,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   type="number"
                   value={formData.standard_batch_size}
                   onChange={(e) => setFormData({ ...formData, standard_batch_size: e.target.value })}
+                  placeholder="e.g. 100000"
                 />
               </div>
 
@@ -586,6 +643,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   type="number"
                   value={formData.moq}
                   onChange={(e) => setFormData({ ...formData, moq: e.target.value })}
+                  placeholder="e.g. 10000"
                 />
               </div>
 
@@ -593,7 +651,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 <label>Artwork Status</label>
                 <select
                   value={formData.artwork_status}
-                  onChange={(e) => setFormData({ ...formData, artwork_status: e.target.value, primary_pm_code: '', secondary_pm_code: '', leaf_pm_code: '' })}
+                  onChange={(e) => setFormData({ ...formData, artwork_status: e.target.value, primary_pm_code: '' })}
                 >
                   <option value="Available">Available</option>
                   <option value="Pending">Pending</option>
@@ -601,11 +659,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 </select>
               </div>
 
-              {/* PM Code — only editable if Artwork Status = Available */}
-              {formData.artwork_status === 'Available' && (
-                <>
+              {/* PM Code — editable if Artwork Status = Available */}
+              {formData.artwork_status === 'Available' ? (
                 <div className="form-group">
-                  <label>Primary PM Code *</label>
+                  <label>PM Code *</label>
                   <input
                     type="text"
                     value={formData.primary_pm_code}
@@ -614,30 +671,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     placeholder="e.g. PM-PARA-500"
                   />
                 </div>
+              ) : (
                 <div className="form-group">
-                  <label>Secondary PM Code</label>
-                  <input
-                    type="text"
-                    value={formData.secondary_pm_code}
-                    onChange={(e) => setFormData({ ...formData, secondary_pm_code: e.target.value })}
-                    placeholder="Optional Secondary PM Code"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Leaf PM Code</label>
-                  <input
-                    type="text"
-                    value={formData.leaf_pm_code}
-                    onChange={(e) => setFormData({ ...formData, leaf_pm_code: e.target.value })}
-                    placeholder="Optional Leaf PM Code"
-                  />
-                </div>
-                </>
-              )}
-              {formData.artwork_status !== 'Available' && (
-                <>
-                <div className="form-group">
-                  <label>Primary PM Code</label>
+                  <label>PM Code</label>
                   <input
                     type="text"
                     value="To be updated by Artwork via Get PM Code workflow"
@@ -645,25 +681,6 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     style={{ color: '#999', background: '#f5f5f5' }}
                   />
                 </div>
-                <div className="form-group">
-                  <label>Secondary PM Code</label>
-                  <input
-                    type="text"
-                    value="To be updated by Artwork via Get PM Code workflow"
-                    disabled
-                    style={{ color: '#999', background: '#f5f5f5' }}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Leaf PM Code</label>
-                  <input
-                    type="text"
-                    value="To be updated by Artwork via Get PM Code workflow"
-                    disabled
-                    style={{ color: '#999', background: '#f5f5f5' }}
-                  />
-                </div>
-                </>
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
@@ -681,38 +698,20 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       {pmModal && (
         <div className="modal-overlay" onClick={() => setPmModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Update PM Codes — {pmModal.sku}</h2>
+            <h2>Update PM Code — {pmModal.sku}</h2>
             <div className="form-group">
-              <label>Primary PM Code *</label>
+              <label>PM Code *</label>
               <input
                 type="text"
                 value={primaryPmCodeInput}
                 onChange={(e) => setPrimaryPmCodeInput(e.target.value)}
-                placeholder="Enter Primary PM Code"
+                placeholder="Enter PM Code"
                 required
-              />
-            </div>
-            <div className="form-group">
-              <label>Secondary PM Code</label>
-              <input
-                type="text"
-                value={secondaryPmCodeInput}
-                onChange={(e) => setSecondaryPmCodeInput(e.target.value)}
-                placeholder="Enter Secondary PM Code"
-              />
-            </div>
-            <div className="form-group">
-              <label>Leaf PM Code</label>
-              <input
-                type="text"
-                value={leafPmCodeInput}
-                onChange={(e) => setLeafPmCodeInput(e.target.value)}
-                placeholder="Enter Leaf PM Code"
               />
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button className="submit-button" onClick={handlePmCodeUpdate} disabled={!primaryPmCodeInput.trim()}>
-                Save PM Codes
+                Save PM Code
               </button>
               <button className="nav-button" onClick={() => setPmModal(null)}>
                 Cancel
@@ -731,17 +730,17 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               background: '#e8f5e9',
               border: '1px solid #4caf50',
               borderRadius: '6px',
-              padding: '12px 16px',
+              padding: '14px 18px',
               marginBottom: '16px',
-              fontSize: '1em',
+              fontSize: '0.95em',
               color: '#2e7d32'
             }}>
-              Please review the PM Code submitted by the Artwork team:<br/>
-              <strong style={{ fontSize: '1.2em', display: 'block', marginTop: '6px' }}>
-                Primary: {acceptModal.primaryPmCode || 'N/A'}<br/>
-                Secondary: {acceptModal.secondaryPmCode || 'N/A'}<br/>
-                Leaf: {acceptModal.leafPmCode || 'N/A'}
-              </strong>
+              <p style={{ margin: '0 0 8px 0', fontWeight: 'bold' }}>Please review the PM Codes submitted by the Artwork team:</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#ffffff', padding: '10px 14px', borderRadius: '4px', border: '1px solid #c8e6c9' }}>
+                <div><strong>Primary PM Code *:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1b5e20' }}>{acceptModal.primaryPmCode || 'N/A'}</span></div>
+                <div><strong>Secondary PM Code:</strong> <span style={{ fontFamily: 'monospace', color: acceptModal.secondaryPmCode ? '#1b5e20' : '#777' }}>{acceptModal.secondaryPmCode || '—'}</span></div>
+                <div><strong>Leaf PM Code:</strong> <span style={{ fontFamily: 'monospace', color: acceptModal.leafPmCode ? '#1b5e20' : '#777' }}>{acceptModal.leafPmCode || '—'}</span></div>
+              </div>
             </div>
             <div className="form-group">
               <label>Remarks (Optional)</label>
@@ -841,7 +840,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               />
             </div>
             <div className="form-group">
-              <label>Secondary PM Code</label>
+              <label>Secondary PM Code (Optional)</label>
               <input
                 type="text"
                 value={secondaryPmCodeInput}
@@ -850,7 +849,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               />
             </div>
             <div className="form-group">
-              <label>Leaf PM Code</label>
+              <label>Leaflet / Leaf PM Code (Optional)</label>
               <input
                 type="text"
                 value={leafPmCodeInput}
@@ -919,7 +918,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                             <span>Created ➔ {tx.to_state}</span>
                           )}
                         </td>
-                        <td>{tx.pm_code || '—'}</td>
+                        <td>{tx.primary_pm_code || tx.pm_code || '—'}</td>
                         <td>{tx.remarks || '—'}</td>
                         <td>
                           {tx.response_time_days > 0 ? (
@@ -932,6 +931,14 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                         </td>
                       </tr>
                     ))}
+                  {(!historyModal.pm_code_requests || historyModal.pm_code_requests.length === 0 || 
+                    historyModal.pm_code_requests.flatMap((req: any) => req.transactions || []).length === 0) && (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
+                        No PM Code request history records found for this product.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
