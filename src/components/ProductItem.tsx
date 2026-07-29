@@ -92,7 +92,7 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, customerProducts, on
             style={customerProducts.length > 0 ? inp : inpDis} disabled={customerProducts.length === 0}>
             <option value="">{customerProducts.length > 0 ? '— Select SKU —' : 'No products for this customer'}</option>
             {customerProducts.map((p: any) => (
-              <option key={p.sku_code} value={p.sku_code}>{p.sku_code}</option>
+              <option key={p.sku_code} value={p.sku_code}>{`${p.sku_code} - ${p.product_name}`}</option>
             ))}
           </select>
         </div>
@@ -117,12 +117,12 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, customerProducts, on
           <input type="number" value={product.moq} readOnly style={inpDis} placeholder="Auto-filled from SKU" min="0" />
         </div>
         <div style={fld}>
-          <label style={lbl}>Artwork Status *</label>
+          {/* <label style={lbl}>Artwork Status *</label>
           <select value={product.artworkStatus} onChange={e => onUpdate(product.id, 'artworkStatus', e.target.value)} style={inp}>
             <option value="Not Available">Not Available</option>
             <option value="Pending">Pending</option>
             <option value="Available">Available</option>
-          </select>
+          </select> */}
         </div>
         {product.artworkStatus === 'Available' && (
           <>

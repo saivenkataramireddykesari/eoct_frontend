@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { customerAPI, Customer } from '../services/api';
+import { customerAPI, productAPI, Customer } from '../services/api';
 
 interface User {
   id: number;
@@ -23,19 +23,39 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [countries, setCountries] = useState<string[]>([]);
+
+
   useEffect(() => {
     fetchCustomers();
+    fetchCountries();
   }, []);
 
-  const fetchCustomers = async () => {
+  useEffect(() => {
+    fetchCustomers(selectedCountry);
+  }, [selectedCountry]);
+
+  const fetchCustomers = async (countryFilter?: string) => {
     try {
-      const response = await customerAPI.getCustomers();
+      const response = await customerAPI.getCustomers(countryFilter);
       setCustomers(response.data);
     } catch (err) {
       setError('Failed to fetch customers.');
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCountries = async () => {
+    try {
+      const response = await productAPI.getCountries();
+      if (response.data && Array.isArray(response.data.countries)) {
+        setCountries(response.data.countries);
+      }
+    } catch (err) {
+      console.error('Failed to fetch countries:', err);
     }
   };
 
@@ -97,6 +117,23 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
       <p>Welcome, {user.name} ({user.department} - {user.role})</p>
 
       <button onClick={() => setShowAddModal(true)}>Add New Customer</button>
+
+      <div style={{ marginBottom: '15px' }}>
+        <label htmlFor="country-filter">Filter by Country:</label>
+        <select
+          id="country-filter"
+          value={selectedCountry}
+          onChange={(e) => setSelectedCountry(e.target.value)}
+          style={{ marginLeft: '10px', padding: '5px' }}
+        >
+          <option value="">All Countries</option>
+          {countries.map((country) => (
+            <option key={country} value={country}>
+              {country}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <h3>Customer List</h3>
       {customers.length === 0 ? (

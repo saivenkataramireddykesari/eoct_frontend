@@ -75,7 +75,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       try {
         const [regRes, prodRes] = await Promise.all([
           registrationAPI.getRegistrationsBySku(sku),
-          productAPI.getProduct(sku),
+          productAPI.getProductBySku(sku),
         ]);
         setRegsBySku(regRes.data);
         setSelectedSkuProduct(prodRes.data);

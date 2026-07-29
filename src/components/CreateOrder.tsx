@@ -61,6 +61,11 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const [importLicValidity, setImportLicValidity] = useState('');
   const [remarks, setRemarks]       = useState('');
 
+  /* ── Product filtering states ── */
+  const [selectedProductSku, setSelectedProductSku] = useState<string>('');
+  const [selectedProductName, setSelectedProductName] = useState<string>('');
+
+
   /* ── Products State (multiple) ── */
   interface OrderProduct {
     id: string;
@@ -113,46 +118,99 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const handleUpdateProduct = (id: string, field: string, value: any) => {
     // Functional form ensures we always operate on the latest state
     setProducts(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+
+    // If the updated product is the first one, update the selected SKU/Product Name states
+    // This assumes the first product in the array is the one whose selection should influence customer filtering
+    if (products[0]?.id === id) {
+      if (field === 'skuCode') setSelectedProductSku(value);
+      if (field === 'productName') setSelectedProductName(value);
+    }
   };
 
   // Bulk-update multiple fields at once in a single setState call
   const handleUpdateManyProducts = (id: string, fields: Record<string, any>) => {
     setProducts(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p));
+    if (products[0]?.id === id) {
+      if (fields.skuCode) setSelectedProductSku(fields.skuCode);
+      if (fields.productName) setSelectedProductName(fields.productName);
+    }
   };
 
-  /* load all customers once to get unique countries */
+  /* Function to fetch filtered customers */
+  const fetchFilteredCustomers = async (
+    currentCountry: string,
+    currentCategory: string,
+    currentProductSku: string,
+    currentProductName: string
+  ) => {
+    try {
+      const response = await customerAPI.getCustomers(
+        currentCountry,
+        currentProductSku,
+        currentProductName,
+        currentCategory
+      );
+      setFilteredCustomers(response.data);
+    } catch (err: any) { // Corrected catch syntax
+      console.error("Error fetching filtered customers:", err);
+      setError("Failed to load customers.");
+    }
+  };
+
+  /* Load all customers and countries on initial render */
   useEffect(() => {
-    customerAPI.getCustomers().then(res => {
-      const customers = res.data;
-      setAllCustomers(customers);
-      const uniqueCountries: string[] = Array.from(
-        new Set(customers.map((c: any) => c.country as string))
-      ).sort() as string[];
-      setCountries(uniqueCountries);
-    }).catch(err => {
-      console.error("Error fetching all customers:", err);
-      setError("Failed to load countries.");
-    });
+    const loadInitialData = async () => {
+      try {
+        const res = await customerAPI.getCustomers(); // Fetch all customers initially
+        const customers = res.data;
+        setAllCustomers(customers);
+        const uniqueCountries: string[] = Array.from(
+          new Set(customers.map((c: any) => c.country as string))
+        ).sort() as string[];
+        setCountries(uniqueCountries);
+      } catch (err: any) { // Corrected catch syntax
+        console.error("Error fetching initial data:", err);
+        setError("Failed to load initial data (customers/countries).");
+      }
+    };
+    loadInitialData();
   }, []);
 
-  /* update customer list + clear selections when country changes */
+  /* Effect to re-fetch filtered customers when relevant filters change */
+  useEffect(() => {
+    // Only fetch if at least one filter is applied, otherwise show all customers
+    if (country || orderCategory || selectedProductSku || selectedProductName) {
+      fetchFilteredCustomers(country, orderCategory, selectedProductSku, selectedProductName);
+    } else {
+      setFilteredCustomers(allCustomers);
+    }
+  }, [country, orderCategory, selectedProductSku, selectedProductName, allCustomers]);
+
+
+  /* Update customer list + clear selections when country changes */
   const handleCountryChange = (val: string) => {
     setCountry(val);
     setCustomerId('');
     setCustomerName('');
     setPoNumber('');
-    setFilteredCustomers([]);
+    // setFilteredCustomers will be updated by the useEffect above
     setCustomerProducts([]); // Clear customer products
     setProducts([generateEmptyProduct('Not Available')]); // Clear and reset products
+    setSelectedProductSku('');
+    setSelectedProductName('');
+  };
 
-    if (val) {
-      customerAPI.getCustomersByCountry(val).then(res => {
-        setFilteredCustomers(res.data);
-      }).catch(err => {
-        console.error("Error fetching customers by country:", err);
-        setError("Failed to load customers for selected country.");
-      });
-    }
+  /* Update customer list + clear selections when order category changes */
+  const handleOrderCategoryChange = (val: string) => {
+    setOrderCategory(val);
+    setCustomerId('');
+    setCustomerName('');
+    setPoNumber('');
+    // setFilteredCustomers will be updated by the useEffect above
+    setCustomerProducts([]); // Clear customer products
+    setProducts([generateEmptyProduct('Not Available')]); // Clear and reset products
+    setSelectedProductSku('');
+    setSelectedProductName('');
   };
 
   /* auto-generate PO number + fetch products when customer is picked */
@@ -199,12 +257,12 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
             return p;
           }));
 
-        }).catch(err => {
+        }).catch((err: any) => { // Corrected catch syntax
           console.error('Error fetching products for customer:', err);
           setError('Failed to load products for selected customer.');
         });
 
-      }).catch(err => {
+      }).catch((err: any) => { // Corrected catch syntax
         console.error('Error fetching customer details for order defaults:', err);
         setError('Failed to load order defaults for selected customer.');
       });
@@ -230,11 +288,9 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
 
 
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Validate each product\n    for (const product of products) {\n      if (!product.skuCode.trim()) { setError(\'SKU Code is required for all products\'); return; }\n      const productTotalQty = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);\n      if (productTotalQty <= 0) { setError(\`Total quantity must be greater than 0 for product ${product.skuCode}\`); return; }\n    }\n\n    // Calculate total quantity across all products for a general check, if needed\n    const overallTotalQty = products.reduce((sum, product) => sum + ((parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0)), 0);\n    if (overallTotalQty <= 0) { setError(\'At least one product must have a total quantity greater than 0\'); return; }
-
     setLoading(true); setError(''); setSuccess('');
     try {
       /* 1. Create product (if not already existing/updated) - for now, we just pass the selected product's details */
@@ -397,7 +453,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
               </div>
               <div style={fld}>
                 <label style={lbl}>Category *</label>
-                <select value={orderCategory} onChange={e => setOrderCategory(e.target.value)} required style={inp}>
+                <select value={orderCategory} onChange={e => handleOrderCategoryChange(e.target.value)} required style={inp}>
                   <option value="">— Select Category —</option>
                   <option value="Drug">Drug</option>
                   <option value="Nutra">Nutra</option>

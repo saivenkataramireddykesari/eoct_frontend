@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { productAPI } from '../services/api';
 import Header from './Header';
 
@@ -7,7 +7,12 @@ interface ProductsProps {
   onLogout: () => void;
 }
 
-const DEFAULT_CATEGORIES = ["Drug", "Nutra", "Excipient"];
+interface SkuSuggestion {
+  sku_code: string;
+  product_name: string;
+}
+
+const DEFAULT_CATEGORIES = ["PP", "PNS", "ALL"];
 
 const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [products, setProducts] = useState<any[]>([]);
@@ -16,6 +21,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string } | null>(null);
   const [primaryPmCodeInput, setPrimaryPmCodeInput] = useState('');
   
+  const [skuSuggestions, setSkuSuggestions] = useState<SkuSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Dropdown options from database & defaults
   const [countries, setCountries] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
@@ -35,6 +44,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     leafPmCode: string;
   } | null>(null);
   const [acceptRemarks, setAcceptRemarks] = useState('');
+
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editProductId, setEditProductId] = useState<number | null>(null); // To store the ID of the product being edited
 
   const [formData, setFormData] = useState({
     sku_code: '',
@@ -56,9 +68,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const isRegulatory = user?.department === 'Regulatory';
 
   useEffect(() => {
-    fetchProducts(1);
+    fetchProducts(1, user?.department);
     fetchMasterData();
-  }, []);
+  }, [user?.department]);
 
   const fetchMasterData = async () => {
     try {
@@ -80,11 +92,11 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
   };
 
-  const fetchProducts = async (p: number = page) => {
+  const fetchProducts = async (p: number = page, scmUserType?: string) => {
     try {
       setLoading(true);
       const skip = (p - 1) * pageSize;
-      const response = await productAPI.getProducts(skip, pageSize);
+      const response = await productAPI.getProducts(skip, pageSize, scmUserType);
       setProducts(response.data);
       setHasMore(response.data.length === pageSize);
     } catch (error) {
@@ -94,36 +106,133 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
   };
 
+  const resetForm = () => {
+    setFormData({
+      sku_code: '',
+      product_name: '',
+      category: '',
+      country: '',
+      customer: '',
+      pack_size: '',
+      standard_batch_size: '',
+      moq: '',
+      primary_pm_code: '',
+      artwork_status: 'Not Available',
+    });
+    setIsEditMode(false);
+    setEditProductId(null);
+  };
+
+  const handleSkuSelect = async (selectedSku: string) => {
+    setFormData({ ...formData, sku_code: selectedSku });
+    setShowSuggestions(false);
+    setSkuSuggestions([]); // Clear suggestions after selection
+
+    try {
+      const response = await productAPI.getProductBySku(selectedSku);
+      if (response.data) {
+        setFormData({
+          ...formData,
+          ...response.data,
+          // Ensure numbers are numbers, or empty strings if null/undefined
+          standard_batch_size: response.data.standard_batch_size || '',
+          moq: response.data.moq || '',
+          sku_code: response.data.sku_code || '', // Keep SKU from API if available
+        });
+        setIsEditMode(true);
+        setEditProductId(response.data.id);
+      } else {
+        // Product not found, clear all fields except SKU and set to add mode
+        setFormData({
+          sku_code: selectedSku,
+          product_name: '',
+          category: '',
+          country: '',
+          customer: '',
+          pack_size: '',
+          standard_batch_size: '',
+          moq: '',
+          primary_pm_code: '',
+          artwork_status: 'Not Available',
+        });
+        setIsEditMode(false);
+        setEditProductId(null);
+      }
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        // Product not found, clear all fields except SKU and set to add mode
+        setFormData({
+          sku_code: selectedSku,
+          product_name: '',
+          category: '',
+          country: '',
+          customer: '',
+          pack_size: '',
+          standard_batch_size: '',
+          moq: '',
+          primary_pm_code: '',
+          artwork_status: 'Not Available',
+        });
+      } else {
+        console.error('Error fetching product by SKU:', error);
+      }
+      setIsEditMode(false);
+      setEditProductId(null);
+    }
+  };
+
+  const handleSkuSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const sku = e.target.value;
+    setFormData({ ...formData, sku_code: sku });
+    setSkuSuggestions([]); // Clear previous suggestions
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (sku.length > 1) { // Start searching after 1 character
+      searchTimeoutRef.current = setTimeout(async () => {
+        // Directly attempt to select the SKU, which will trigger fetching product details
+        handleSkuSelect(sku);
+      }, 300); // Debounce for 300ms
+    }
+  };
+
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       console.log("Submitting product with PM Code:", formData.primary_pm_code);
-      await productAPI.createProduct({
-        ...formData,
-        standard_batch_size: parseInt(formData.standard_batch_size) || null,
-        moq: parseInt(formData.moq) || null,
-        primary_pm_code: formData.artwork_status === 'Available' ? formData.primary_pm_code : '',
-        secondary_pm_code: '',
-        leaf_pm_code: '',
-        current_artwork_version: '',
-      });
+      if (isEditMode && editProductId) {
+        await productAPI.updateProduct(editProductId, {
+          ...formData,
+          standard_batch_size: parseInt(formData.standard_batch_size) || null,
+          moq: parseInt(formData.moq) || null,
+          primary_pm_code: formData.artwork_status === 'Available' ? formData.primary_pm_code : '',
+          secondary_pm_code: '',
+          leaf_pm_code: '',
+          current_artwork_version: '',
+        });
+        alert('Product updated successfully!');
+      } else {
+        await productAPI.createProduct({
+          ...formData,
+          standard_batch_size: parseInt(formData.standard_batch_size) || null,
+          moq: parseInt(formData.moq) || null,
+          primary_pm_code: formData.artwork_status === 'Available' ? formData.primary_pm_code : '',
+          secondary_pm_code: '',
+          leaf_pm_code: '',
+          current_artwork_version: '',
+        });
+        alert('Product created successfully!');
+      }
       setShowModal(false);
       fetchProducts();
-      setFormData({
-        sku_code: '',
-        product_name: '',
-        category: '',
-        country: '',
-        customer: '',
-        pack_size: '',
-        standard_batch_size: '',
-        moq: '',
-        primary_pm_code: '',
-        artwork_status: 'Not Available',
-      });
+      resetForm(); // Reset form after submission
     } catch (error) {
-      console.error('Error creating product:', error);
-      alert('Error creating product');
+      console.error('Error creating/updating product:', error);
+      alert('Error creating/updating product');
     }
   };
 
@@ -199,7 +308,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
           <h2>Products</h2>
           {/* Only show "Add Product" for Regulatory department */}
           {user.department === 'Regulatory' && (
-            <button className="submit-button" onClick={() => setShowModal(true)}>
+            <button className="submit-button" onClick={() => { setShowModal(true); resetForm(); }}>
               + Add Product
             </button>
           )}
@@ -562,10 +671,12 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 <input
                   type="text"
                   value={formData.sku_code}
-                  onChange={(e) => setFormData({ ...formData, sku_code: e.target.value })}
+                  onChange={handleSkuSearchChange}
+
                   required
                   placeholder="e.g. SKU-101"
                 />
+
               </div>
 
               <div className="form-group">
@@ -684,7 +795,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button type="submit" className="submit-button">Add Product</button>
+                <button type="submit" className="submit-button">{isEditMode ? 'Update Product' : 'Add Product'}</button>
                 <button type="button" className="nav-button" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>

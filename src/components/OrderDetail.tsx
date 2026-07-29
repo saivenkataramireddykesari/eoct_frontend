@@ -425,7 +425,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                   <th>Remarks</th>
                   <th>Date</th>
                   <th>Time Taken</th>
-                  <th>Action</th>
+                  {/* <th>Action</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -500,7 +500,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                     <td>{approval.approved_at ? new Date(approval.approved_at).toLocaleDateString() : '—'}</td>
                     <td>{getDays()}</td>
                     <td>
-                      {showApproveBtn && (
+                      {/* {showApproveBtn && (
                         <button
                           className="nav-button"
                           style={canApproveStatus?.is_scm_override ? { background: '#ff6f00', borderColor: '#e65100', color: '#fff' } : {}}
@@ -508,7 +508,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                         >
                           {canApproveStatus?.is_scm_override ? '⚡ Override' : '✔ Approve / Reject'}
                         </button>
-                      )}
+                      )} */}
                       {approval.status === 'PENDING' &&
                        !canApproveStatus?.can_approve && (
                         <span style={{ color: '#94a3b8', fontSize: '0.82em' }}>
@@ -608,7 +608,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         <div style={{ marginTop: '30px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Execution Milestones</h3>
-            {user.department === 'Regulatory' && (
+            {user.department === 'SCM' && (
               <button
                 className="submit-button"
                 style={{ background: '#3f51b5', borderColor: '#3f51b5' }}

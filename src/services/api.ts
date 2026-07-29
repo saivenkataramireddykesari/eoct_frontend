@@ -1,24 +1,45 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = 'https://eoct-backend.onrender.com/api';
 
-// https://eoct-backend.onrender.com
+// 
 
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 10000, // Set timeout to 10 seconds
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Request Interceptor
+api.interceptors.request.use(
+  (config) => {
+    console.log("Axios Request:", config);
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    console.error("Axios Request Error:", error);
+    return Promise.reject(error);
   }
-  return config;
-});
+);
+
+// Response Interceptor
+api.interceptors.response.use(
+  (response) => {
+    console.log("Axios Response:", response);
+    return response;
+  },
+  (error) => {
+    console.error("Axios Response Error:", error.response || error);
+    return Promise.reject(error);
+  }
+);
+
 
 // Auth APIs
 export const authAPI = {
@@ -49,10 +70,11 @@ export const orderAPI = {
 
 // Product APIs
 export const productAPI = {
-  getProducts: (skip: number = 0, limit: number = 20) => api.get('/products', { params: { skip, limit } }),
+  getProducts: (skip: number = 0, limit: number = 20, scmUserType?: string) => api.get('/products', { params: { skip, limit, scm_user_type: scmUserType } }),
   getProductsByCountry: (country: string) => api.get('/products/by-country', { params: { country } }),
   createProduct: (data: any) => api.post('/products', data),
-  getProduct: (sku: string) => api.get(`/products/${sku}`),
+  getProductBySku: (sku: string) => api.get(`/products/sku/${sku}`), // New endpoint for fetching by SKU
+  updateProduct: (id: number, data: any) => api.put(`/products/${id}`, data), // New endpoint for updating product
   updatePmCode: (sku: string, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string) => api.patch(`/products/${sku}/pm-code`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode }),
   getPmRequests: () => api.get('/products/pm-requests'),
   requestPmCode: (sku: string) => api.post(`/products/${sku}/pm-requests`),
@@ -60,6 +82,7 @@ export const productAPI = {
   decidePmCode: (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string) => api.post(`/products/pm-requests/${requestId}/decide`, { decision, remarks }),
   getCategories: () => api.get('/categories'),
   getCountries: () => api.get('/countries'),
+  searchProductsBySku: (query: string) => api.get(`/products/search-sku`, { params: { query } }),
 };
 
 // Customer APIs
@@ -81,8 +104,21 @@ export interface Customer {
 
 
 export const customerAPI = {
-  getCustomers: (skip: number = 0, limit: number = 20) => api.get<Customer[]>('/customers', { params: { skip, limit } }),
-  getCustomersByCountry: (country: string, skip: number = 0, limit: number = 20) => api.get<Customer[]>('/customers', { params: { country, skip, limit } }),
+  getCustomers: (
+    country?: string,
+    productSku?: string,
+    productName?: string,
+    productCategory?: string,
+    skip: number = 0,
+    limit: number = 20
+  ) => {
+    const params: any = { skip, limit };
+    if (country) params.country = country;
+    if (productSku) params.product_sku = productSku;
+    if (productName) params.product_name = productName;
+    if (productCategory) params.product_category = productCategory;
+    return api.get<Customer[]>('/customers', { params });
+  },
   createCustomer: (data: any) => api.post<Customer>('/customers', data),
   getCustomer: (id: number) => api.get<Customer>(`/customers/${id}`),
   getProductsForCustomer: (customerId: number) => api.get<any[]>(`/customers/${customerId}/products`),
@@ -93,6 +129,7 @@ export const registrationAPI = {
   getRegistrations: (skip: number = 0, limit: number = 20) => api.get('/registrations', { params: { skip, limit } }),
   getCountries: () => api.get('/countries'),
   getRegistrationsBySku: (sku: string) => api.get('/registrations/by-sku', { params: { sku } }),
+  getRegistrationByCountryAndSku: (country: string, sku: string) => api.get('/registrations/by-country-sku', { params: { country, sku } }),
   createRegistration: (data: any) => api.post('/registrations', data),
   uploadCertificate: (id: number, file: File) => {
     const formData = new FormData();

@@ -12,17 +12,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log("Login clicked");
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
+      console.log("Employee ID:", employeeId);
+      console.log("Password:", password);
+      console.log("Calling API...");
       const response = await authAPI.login(employeeId, password);
+      console.log("API call successful, response:", response);
       const { access_token, user } = response.data;
       onLogin(user, access_token);
     } catch (err: any) {
+      console.error("API call failed, error:", err);
       setError(err.response?.data?.detail || 'Invalid Employee ID or Password');
     } finally {
+      console.log("Loading state set to false");
       setLoading(false);
     }
   };

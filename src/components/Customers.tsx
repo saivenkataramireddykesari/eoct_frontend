@@ -31,7 +31,7 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
     try {
       setLoading(true);
       const skip = (p - 1) * pageSize;
-      const response = await customerAPI.getCustomers(skip, pageSize);
+      const response = await customerAPI.getCustomers(undefined, undefined, undefined, undefined, skip, pageSize);
       setCustomers(response.data);
       setHasMore(response.data.length === pageSize);
     } catch (error) {
