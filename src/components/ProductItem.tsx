@@ -1,26 +1,45 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { productAPI } from '../services/api';
 
 interface ProductItemProps {
   product: any;
-  customerProducts: any[];
   onUpdate: (id: string, field: string, value: any) => void;
   onUpdateMany: (id: string, fields: Record<string, any>) => void; // Bulk update — avoids stale closure
   onRemove: (id: string) => void;
   errors: any;
   currencies: string[]; // Add this
+  selectedCountry: string;
+  selectedCustomerId: string;
 }
 
-const ProductItem: React.FC<ProductItemProps> = ({ product, customerProducts, onUpdate, onUpdateMany, onRemove, errors, currencies }) => {
+const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMany, onRemove, errors, currencies, selectedCountry, selectedCustomerId }) => {
+  const [allProducts, setAllProducts] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchFilteredProducts = async () => {
+      if (!selectedCountry || !selectedCustomerId) {
+        setAllProducts([]);
+        return;
+      }
+      try {
+        const response = await productAPI.getProductsFiltered(selectedCountry, selectedCustomerId);
+        setAllProducts(response.data);
+      } catch (error) {
+        console.error("Error fetching filtered products:", error);
+      }
+    };
+    fetchFilteredProducts();
+  }, [selectedCountry, selectedCustomerId]);
 
   const totalQuantity = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);
   const totalPrice = totalQuantity * (parseFloat(product.price) || 0);
 
-  // Populate product fields from the already-fetched customerProducts list
+  // Populate product fields from the already-fetched allProducts list
   // Uses onUpdateMany to merge all fields in ONE setState call — avoids the stale-closure
   // problem where successive onUpdate() calls each only see the original product snapshot.
   useEffect(() => {
-    if (product.skuCode && customerProducts.length > 0) {
-      const found = customerProducts.find((p: any) => p.sku_code === product.skuCode);
+    if (product.skuCode && allProducts.length > 0) {
+      const found = allProducts.find((p: any) => p.sku_code === product.skuCode);
       if (found) {
         onUpdateMany(product.id, {
           productName:  found.product_name                                     || '',
@@ -41,7 +60,7 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, customerProducts, on
         price: '', totalPrice: 0, // Reset price and totalPrice
       });
     }
-  }, [product.skuCode, customerProducts]); // deps: SKU selection + available product list
+  }, [product.skuCode, allProducts]); // deps: SKU selection + available product list
 
   // Recalculate totalPrice whenever salesQty, freeQty, or price changes
   useEffect(() => {
@@ -89,9 +108,9 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, customerProducts, on
         <div style={fld}>
           <label style={lbl}>SKU Code *</label>
           <select value={product.skuCode} onChange={e => onUpdate(product.id, 'skuCode', e.target.value)} required
-            style={customerProducts.length > 0 ? inp : inpDis} disabled={customerProducts.length === 0}>
-            <option value="">{customerProducts.length > 0 ? '— Select SKU —' : 'No products for this customer'}</option>
-            {customerProducts.map((p: any) => (
+            style={allProducts.length > 0 ? inp : inpDis} disabled={allProducts.length === 0}>
+            <option value="">{allProducts.length > 0 ? '— Select SKU —' : 'No products available'}</option>
+            {allProducts.map((p: any) => (
               <option key={p.sku_code} value={p.sku_code}>{`${p.sku_code} - ${p.product_name}`}</option>
             ))}
           </select>

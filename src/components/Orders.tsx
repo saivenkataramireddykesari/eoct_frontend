@@ -130,6 +130,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                 <th>Customer</th>
                 <th>Country</th>
                 <th>SKU</th>
+                <th>Category</th>
                 <th>Quantity</th>
                 <th>Delivery Date</th>
                 <th>Status</th>
@@ -148,8 +149,9 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   <td>{order.order_id}</td>
                   <td>{order.order_number}</td>
                   <td>{order.customer?.customer_name}</td>
-                  <td>{order.country}</td>
+                  <td>{order.country?.name || "-"}</td>
                   <td>{order.sku}</td>
+                  <td>{order.product?.category || "-"}</td>
                   <td>{order.quantity}</td>
                   <td>{new Date(order.requested_delivery_date).toLocaleDateString()}</td>
                   <td>
@@ -197,11 +199,15 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Country</span>
-                <span className="mobile-card-value">{order.country}</span>
+                <span className="mobile-card-value">{order.country?.name || "-"}</span>
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">SKU</span>
                 <span className="mobile-card-value">{order.sku}</span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="mobile-card-label">Category</span>
+                <span className="mobile-card-value">{order.product?.category || "-"}</span>
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Quantity</span>

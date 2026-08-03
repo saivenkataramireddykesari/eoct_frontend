@@ -241,7 +241,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   // SCM/Artwork milestones: SCM or Management.
   const canUpdateMilestone = (milestoneCategory: string) => {
     if (milestoneCategory === 'Logistics') {
-      return user.department === 'Exports'; // Exports team only — no Management override
+      return user.department === 'Exports' || user.department === 'Exports Team' || user.department?.startsWith('Exports');
     }
     if (milestoneCategory === 'SCM' || milestoneCategory === 'Artwork') {
       return user.department === 'SCM' || user.department === 'Management';
@@ -327,7 +327,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             <h3>Order Information</h3>
             <p><strong>Order Number:</strong> {order.order_number}</p>
             <p><strong>Customer:</strong> {order.customer?.customer_name}</p>
-            <p><strong>Country:</strong> {order.country}</p>
+            <p><strong>Country:</strong> {order.country?.name || "-"}</p>
             <p><strong>PO Number:</strong> {order.po_number}</p>
             <p><strong>PO Date:</strong> {new Date(order.po_date).toLocaleDateString()}</p>
           </div>
@@ -608,7 +608,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         <div style={{ marginTop: '30px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Execution Milestones</h3>
-            {user.department === 'SCM' && (
+            {(user.department === 'SCM' || user.department === 'Exports' || user.department === 'Exports Team' || user.department?.startsWith('Exports')) && (
               <button
                 className="submit-button"
                 style={{ background: '#3f51b5', borderColor: '#3f51b5' }}
@@ -620,58 +620,86 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
           </div>
 
           
-          {['Artwork', 'SCM', 'Logistics'].map((category) => (
-            <div key={category} style={{ marginBottom: '20px' }}>
-              <h4>{category}</h4>
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Milestone</th>
-                      <th>Status</th>
-                      <th>Target Date</th>
-                      <th>Actual Date</th>
-                      <th>Remarks</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {order.milestones
-                      ?.filter((m: any) => m.category === category)
-                      .map((milestone: any) => (
-                        <tr key={milestone.id}>
-                          <td>{milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name}</td>
-                          <td>
-                            <span className={`status-badge ${getStatusClass(milestone.status)}`}>
-                              {milestone.status}
-                            </span>
-                          </td>
-                          <td>{milestone.target_date ? new Date(milestone.target_date).toLocaleDateString() : '-'}</td>
-                          <td>{milestone.actual_date ? new Date(milestone.actual_date).toLocaleDateString() : '-'}</td>
-                          <td>{milestone.remarks || '-'}</td>
-                          <td>
-                            {canUpdateMilestone(category) ? (
-                              <button
-                                className="nav-button"
-                                onClick={() => {
-                                  setSelectedMilestone(milestone);
-                                  setMilestoneModal(true);
-                                }}
-                              >
-                                Update
-                              </button>
-                            ) : (
-                              <span style={{ color: '#999', fontSize: '0.85em' }}>View Only</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Milestone</th>
+                  <th>Status</th>
+                  <th>Target Date</th>
+                  <th>Actual Date</th>
+                  <th>Remarks</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
 
-              {/* Mobile Card View for Milestones */}
-              <div className="mobile-table-cards">
+              <tbody>
+                {order.milestones?.map((milestone: any) => (
+                  <tr key={milestone.id}>
+                    <td>
+                      {milestone.name === "PM Procurement Released"
+                        ? "PO Released"
+                        : milestone.name}
+                    </td>
+
+                    <td>
+                      <span className={`status-badge ${getStatusClass(milestone.status)}`}>
+                        {milestone.status}
+                      </span>
+                    </td>
+
+                    <td>
+                      {milestone.target_date
+                        ? new Date(milestone.target_date).toLocaleDateString()
+                        : "-"}
+                    </td>
+
+                    <td>
+                      {milestone.actual_date
+                        ? new Date(milestone.actual_date).toLocaleDateString()
+                        : "-"}
+                    </td>
+
+                    <td>{milestone.remarks || "-"}</td>
+
+                    <td>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        {canUpdateMilestone(milestone.category) && (
+                          <button
+                            className="nav-button"
+                            onClick={() => {
+                              setSelectedMilestone(milestone);
+                              setMilestoneModal(true);
+                            }}
+                          >
+                            Update
+                          </button>
+                        )}
+
+                        <button
+                          className="nav-button"
+                          style={{
+                            background: "#f1f5f9",
+                            color: "#334155",
+                            border: "1px solid #cbd5e1",
+                          }}
+                          onClick={() => {
+                            setSelectedMilestone(milestone);
+                            setMilestoneModal(true);
+                          }}
+                        >
+                          History
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+              {['Artwork', 'SCM', 'Logistics'].map((category) => (
+                <div key={category} className="mobile-table-cards">
                 {order.milestones
                   ?.filter((m: any) => m.category === category)
                   .map((milestone: any) => (
@@ -723,8 +751,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                     </div>
                   ))}
               </div>
-            </div>
-          ))}
+              ))}
         </div>
 
         {/* Audit Trail Section */}

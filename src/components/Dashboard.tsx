@@ -47,7 +47,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
     fetchDashboard();
     if (user.department === 'Regulatory') {
       registrationAPI.getCountries()
-        .then(r => setRegCountries(r.data.countries || []))
+        .then(r => setRegCountries(r.data.map((c: any) => c.name) || []))
         .catch(() => {});
     }
   }, []);
@@ -389,7 +389,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
                     <option value="">— Select Registration Number —</option>
                     {regsBySku.map((r: any) => (
                       <option key={r.id} value={r.registration_number}>
-                        {r.registration_number} ({r.country})
+                        {r.registration_number} ({r.country?.name || "-"})
                       </option>
                     ))}
                   </select>

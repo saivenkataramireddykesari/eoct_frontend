@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { customerAPI } from '../services/api';
+import { customerAPI, productAPI, formatErrorMessage } from '../services/api';
+import { Customer, Country } from '../shared-types';
 import Header from './Header';
 
 interface CustomersProps {
@@ -8,13 +9,20 @@ interface CustomersProps {
 }
 
 const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [countryCustomers, setCountryCustomers] = useState<Customer[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  
   const [formData, setFormData] = useState({
+    country_id: '' as string | number,
     customer_name: '',
-    country: '',
-    payment_terms: '',
+    shipping_terms: '',
     agreement_status: 'Pending',
     agreement_validity: '',
   });
@@ -25,7 +33,25 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     fetchCustomers(1);
+    fetchCountries();
   }, []);
+
+  const fetchCountries = async () => {
+    try {
+      const response = await productAPI.getCountries();
+      let list: Country[] = [];
+      if (Array.isArray(response.data)) {
+        list = response.data.map((c: any) => typeof c === 'string' ? { id: 0, name: c } : c);
+      } else if (typeof response.data === 'object' && response.data !== null && 'countries' in response.data && Array.isArray((response.data as { countries: any[] }).countries)) {
+        list = (response.data as { countries: any[] }).countries.map((c: any, idx: number) => typeof c === 'string' ? { id: idx + 1, name: c } : c);
+      }
+      // Sort alphabetically by country name
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      setCountries(list);
+    } catch (error: any) {
+      console.error('Error fetching countries:', error);
+    }
+  };
 
   const fetchCustomers = async (p: number = page) => {
     try {
@@ -41,26 +67,165 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
     }
   };
 
+  const handleCountryChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedCountryId = e.target.value;
+    setFormData({
+      ...formData,
+      country_id: selectedCountryId,
+      customer_name: '',
+    });
+    setIsNewCustomer(false);
+    setCountryCustomers([]);
+    setErrorMessage('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await customerAPI.createCustomer({
-        ...formData,
-        agreement_validity: formData.agreement_validity || null,
-      });
-      setShowModal(false);
-      fetchCustomers();
+    if (selectedCountryId) {
+      try {
+        const response = await customerAPI.getCustomersByCountry(Number(selectedCountryId));
+        setCountryCustomers(response.data);
+      } catch (err) {
+        console.error('Error fetching customers by country:', err);
+      }
+    }
+  };
+
+  const handleCustomerSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setErrorMessage('');
+    if (val === 'addNew') {
+      setIsNewCustomer(true);
       setFormData({
+        ...formData,
         customer_name: '',
-        country: '',
-        payment_terms: '',
+        shipping_terms: '',
         agreement_status: 'Pending',
         agreement_validity: '',
       });
-    } catch (error) {
-      console.error('Error creating customer:', error);
-      alert('Error creating customer');
+    } else {
+      setIsNewCustomer(false);
+      const selected = countryCustomers.find((c) => c.customer_name === val);
+      if (selected) {
+        setFormData({
+          ...formData,
+          customer_name: selected.customer_name,
+          shipping_terms: selected.payment_terms || '',
+          agreement_status: selected.agreement_status || 'Pending',
+          agreement_validity: selected.agreement_validity
+            ? new Date(selected.agreement_validity).toISOString().split('T')[0]
+            : '',
+        });
+      } else {
+        setFormData({ ...formData, customer_name: val });
+      }
+    }
+  };
+
+  const handleModalClose = () => {
+    setShowModal(false);
+    setShowEditModal(false);
+    setEditingCustomer(null);
+    setIsNewCustomer(false);
+    setCountryCustomers([]);
+    setErrorMessage('');
+    setFormData({
+      country_id: '',
+      customer_name: '',
+      shipping_terms: '',
+      agreement_status: 'Pending',
+      agreement_validity: '',
+    });
+  };
+
+  const handleEditClick = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setIsNewCustomer(false);
+    setErrorMessage('');
+    const countryId = customer.country?.id || customer.country_id;
+    
+    setFormData({
+      country_id: countryId || '',
+      customer_name: customer.customer_name,
+      shipping_terms: customer.payment_terms || '',
+      agreement_status: customer.agreement_status,
+      agreement_validity: customer.agreement_validity
+        ? new Date(customer.agreement_validity).toISOString().split('T')[0]
+        : '',
+    });
+
+    if (countryId) {
+      customerAPI.getCustomersByCountry(Number(countryId)).then((res) => {
+        setCountryCustomers(res.data);
+      }).catch(console.error);
+    }
+    
+    setShowEditModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+
+    // Validation for all 5 required fields
+    if (!formData.country_id) {
+      setErrorMessage('Please select a Country.');
+      return;
+    }
+    if (!formData.customer_name.trim()) {
+      setErrorMessage('Please enter or select a Customer Name.');
+      return;
+    }
+    if (!formData.shipping_terms.trim()) {
+      setErrorMessage('Please enter Shipping Terms.');
+      return;
+    }
+    if (!formData.agreement_status) {
+      setErrorMessage('Please select an Agreement Status.');
+      return;
+    }
+    if (!formData.agreement_validity) {
+      setErrorMessage('Please select an Agreement Validity date.');
+      return;
+    }
+
+    try {
+      const payload = {
+        country_id: Number(formData.country_id),
+        customer_name: formData.customer_name.trim(),
+        payment_terms: formData.shipping_terms.trim(),
+        agreement_status: formData.agreement_status,
+        agreement_validity: formData.agreement_validity || null,
+      };
+
+      if (editingCustomer) {
+        await customerAPI.updateCustomer(editingCustomer.id, payload);
+      } else {
+        // Check duplicate customer in same country
+        const isDuplicate = countryCustomers.some(
+          (c) => c.customer_name.toLowerCase() === payload.customer_name.toLowerCase()
+        );
+
+        if (isDuplicate && !isNewCustomer) {
+          // If existing selected customer, update
+          const existingCust = countryCustomers.find(
+            (c) => c.customer_name.toLowerCase() === payload.customer_name.toLowerCase()
+          );
+          if (existingCust) {
+            await customerAPI.updateCustomer(existingCust.id, payload);
+          } else {
+            await customerAPI.createCustomer(payload);
+          }
+        } else if (isDuplicate && isNewCustomer) {
+          setErrorMessage('A customer with this name already exists in the selected country.');
+          return;
+        } else {
+          await customerAPI.createCustomer(payload);
+        }
+      }
+
+      handleModalClose();
+      fetchCustomers();
+    } catch (error: any) {
+      console.error('Error saving customer:', error);
+      setErrorMessage(formatErrorMessage(error, 'Error saving customer. Please try again.'));
     }
   };
 
@@ -75,6 +240,10 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
     }
   };
 
+  const getCountryName = (customer: Customer) => {
+    return customer.country?.name || countries.find((c) => c.id === customer.country_id)?.name || '-';
+  };
+
   if (loading) {
     return <div className="loading">Loading customers...</div>;
   }
@@ -86,7 +255,14 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
       <div className="panel">
         <div className="panel-header">
           <h2>Customers</h2>
-          <button className="submit-button" onClick={() => setShowModal(true)}>
+          <button
+            className="submit-button"
+            onClick={() => {
+              setErrorMessage('');
+              setShowModal(true);
+            }}
+            title="Add New Customer"
+          >
             + Add Customer
           </button>
         </div>
@@ -98,17 +274,18 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
               <tr>
                 <th>Customer Name</th>
                 <th>Country</th>
-                <th>Payment Terms</th>
+                <th>Shipping Terms</th>
                 <th>Agreement Status</th>
                 <th>Agreement Validity</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {customers.map((customer) => (
                 <tr key={customer.id}>
                   <td>{customer.customer_name}</td>
-                  <td>{customer.country}</td>
-                  <td>{customer.payment_terms}</td>
+                  <td>{getCountryName(customer)}</td>
+                  <td>{customer.payment_terms || '-'}</td>
                   <td>
                     <span className={`status-badge ${getAgreementStatusClass(customer.agreement_status)}`}>
                       {customer.agreement_status}
@@ -118,6 +295,11 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
                     {customer.agreement_validity
                       ? new Date(customer.agreement_validity).toLocaleDateString()
                       : '-'}
+                  </td>
+                  <td>
+                    <button className="edit-button" onClick={() => handleEditClick(customer)}>
+                      Edit
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -135,10 +317,10 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Country</span>
-                <span className="mobile-card-value">{customer.country}</span>
+                <span className="mobile-card-value">{getCountryName(customer)}</span>
               </div>
               <div className="mobile-card-row">
-                <span className="mobile-card-label">Payment Terms</span>
+                <span className="mobile-card-label">Shipping Terms</span>
                 <span className="mobile-card-value">{customer.payment_terms || '-'}</span>
               </div>
               <div className="mobile-card-row">
@@ -156,6 +338,11 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
                     ? new Date(customer.agreement_validity).toLocaleDateString()
                     : '-'}
                 </span>
+              </div>
+              <div className="mobile-card-row">
+                <button className="edit-button" onClick={() => handleEditClick(customer)}>
+                  Edit
+                </button>
               </div>
             </div>
           ))}
@@ -192,66 +379,116 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
       </div>
 
 
-      {/* Add Customer Modal */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+      {/* Add / Edit Customer Modal */}
+      {(showModal || showEditModal) && (
+        <div className="modal-overlay" onClick={handleModalClose}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Add New Customer</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label>Customer Name *</label>
-                <input
-                  type="text"
-                  value={formData.customer_name}
-                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                  required
-                />
-              </div>
+            <h2>{editingCustomer ? 'Edit Customer' : 'Add New Customer'}</h2>
 
+            {errorMessage && (
+              <div style={{ padding: '10px 14px', marginBottom: '14px', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', borderRadius: '6px', fontSize: '0.9rem' }}>
+                {errorMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              {/* Field 1: Country * */}
               <div className="form-group">
                 <label>Country *</label>
-                <input
-                  type="text"
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Payment Terms</label>
-                <input
-                  type="text"
-                  value={formData.payment_terms}
-                  onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
-                  placeholder="e.g., Net 30, Net 45"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Agreement Status</label>
                 <select
-                  value={formData.agreement_status}
-                  onChange={(e) => setFormData({ ...formData, agreement_status: e.target.value })}
+                  value={formData.country_id}
+                  onChange={handleCountryChange}
+                  required
                 >
-                  <option value="Active">Active</option>
-                  <option value="Expired">Expired</option>
-                  <option value="Pending">Pending</option>
+                  <option value="">Select Country</option>
+                  {countries.map((country) => (
+                    <option key={country.id} value={country.id}>
+                      {country.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
+              {/* Field 2: Customer Name * (Dropdown + text input if new) */}
               <div className="form-group">
-                <label>Agreement Validity</label>
+                <label>Customer Name *</label>
+                <select
+                  value={isNewCustomer ? 'addNew' : formData.customer_name}
+                  onChange={handleCustomerSelectChange}
+                  disabled={!formData.country_id}
+                  required={!isNewCustomer}
+                >
+                  <option value="">
+                    {formData.country_id ? 'Select Customer' : 'Select Country First'}
+                  </option>
+                  {countryCustomers.map((customer) => (
+                    <option key={customer.id} value={customer.customer_name}>
+                      {customer.customer_name}
+                    </option>
+                  ))}
+                  {formData.country_id && countryCustomers.length === 0 && (
+                    <option disabled value="noCustomers">
+                      No customers available for the selected country.
+                    </option>
+                  )}
+                  <option value="addNew">+ Add New Customer</option>
+                </select>
+
+                {(isNewCustomer || (formData.country_id && countryCustomers.length === 0)) && (
+                  <input
+                    type="text"
+                    value={formData.customer_name}
+                    onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                    required
+                    placeholder="Enter new customer name"
+                    style={{ marginTop: '8px' }}
+                  />
+                )}
+              </div>
+
+              {/* Field 3: Shipping Terms */}
+              <div className="form-group">
+                <label>Shipping Terms *</label>
+                <input
+                  type="text"
+                  value={formData.shipping_terms}
+                  onChange={(e) => setFormData({ ...formData, shipping_terms: e.target.value })}
+                  placeholder="e.g., Net 30, Net 45"
+                  required
+                />
+              </div>
+
+              {/* Field 4: Agreement Status */}
+              <div className="form-group">
+                <label>Agreement Status *</label>
+                <select
+                  value={formData.agreement_status}
+                  onChange={(e) => setFormData({ ...formData, agreement_status: e.target.value })}
+                  required
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Active">Active</option>
+                  <option value="Expired">Expired</option>
+                </select>
+              </div>
+
+              {/* Field 5: Agreement Validity */}
+              <div className="form-group">
+                <label>Agreement Validity *</label>
                 <input
                   type="date"
                   value={formData.agreement_validity}
                   onChange={(e) => setFormData({ ...formData, agreement_validity: e.target.value })}
+                  required
                 />
               </div>
 
+              {/* Buttons: Add Customer / Cancel */}
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button type="submit" className="submit-button">Add Customer</button>
-                <button type="button" className="nav-button" onClick={() => setShowModal(false)}>
+                <button type="submit" className="submit-button">
+                  {editingCustomer ? 'Save Changes' : 'Add Customer'}
+                </button>
+                <button type="button" className="nav-button" onClick={handleModalClose}>
                   Cancel
                 </button>
               </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { customerAPI, productAPI, Customer } from '../services/api';
+import { customerAPI, productAPI } from '../services/api';
+import { Customer, Country } from '../shared-types';
 
 interface User {
   id: number;
@@ -24,7 +25,7 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   const [selectedCountry, setSelectedCountry] = useState<string>('');
-  const [countries, setCountries] = useState<string[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
 
 
   useEffect(() => {
@@ -51,19 +52,20 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
   const fetchCountries = async () => {
     try {
       const response = await productAPI.getCountries();
-      if (response.data && Array.isArray(response.data.countries)) {
-        setCountries(response.data.countries);
+      if (response.data) {
+        setCountries(response.data);
       }
     } catch (err) {
       console.error('Failed to fetch countries:', err);
     }
   };
 
-  const handleAddCustomer = async (newCustomerData: { customer_name: string; country: string; }) => {
+  const handleAddCustomer = async (newCustomerData: { customer_name: string; country: Country; }) => {
     try {
       const customerToCreate = {
         customer_name: newCustomerData.customer_name,
-        country: newCustomerData.country,
+        country: newCustomerData.country.name, // API expects country name as string for creation
+        country_id: newCustomerData.country.id,
         payment_terms: null,
         agreement_status: "Pending",
         agreement_validity: null,
@@ -77,20 +79,15 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
     }
   };
 
-  const handleEditCustomer = async (id: number, updatedFields: { customer_name: string; country: string; }) => {
+  const handleEditCustomer = async (id: number, updatedFields: { customer_name: string; country: Country; }) => {
     try {
-      // Assuming there's an updateCustomer API in customerAPI
-      // await customerAPI.updateCustomer(id, updatedCustomerData);
-      // Since customerAPI doesn't have a direct updateCustomer, we'd need to add one or use a more generic approach if available
-      console.warn("Update Customer API not implemented in customerAPI. Simulating update for now.");
-      
       // In a real scenario, you would make an API call like:
       // await customerAPI.updateCustomer(id, updatedFields);
+      // console.log("Customer updated via API:\n", updatedFields);
 
-      // For now, let's manually update the state to reflect the change visually
       setCustomers(prevCustomers =>
         prevCustomers.map(cust =>
-          cust.id === id ? { ...cust, ...updatedFields } : cust
+          cust.id === id ? { ...cust, ...updatedFields, country_id: updatedFields.country.id } : cust
         )
       );
 
@@ -128,8 +125,8 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
         >
           <option value="">All Countries</option>
           {countries.map((country) => (
-            <option key={country} value={country}>
-              {country}
+            <option key={country.id} value={country.name}>
+              {country.name}
             </option>
           ))}
         </select>
@@ -153,7 +150,7 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
               <tr key={customer.id}>
                 <td>{customer.id}</td>
                 <td>{customer.customer_name}</td>
-                <td>{customer.country}</td>
+                <td>{customer.country?.name || "-"}</td>
                 <td>
                   <button onClick={() => {
                     setEditingCustomer(customer);
@@ -168,6 +165,7 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
 
       {showAddModal && (
         <CustomerForm
+          allCountries={countries}
           onSubmit={handleAddCustomer}
           onCancel={() => setShowAddModal(false)}
         />
@@ -176,7 +174,8 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
       {showEditModal && editingCustomer && (
         <CustomerForm
           initialData={editingCustomer}
-          onSubmit={(data) => handleEditCustomer(editingCustomer.id, { ...editingCustomer, customer_name: data.customer_name, country: data.country })}
+          allCountries={countries}
+          onSubmit={(data) => handleEditCustomer(editingCustomer.id, data)}
           onCancel={() => {
             setShowEditModal(false);
             setEditingCustomer(null);
@@ -189,20 +188,30 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
   );
 };
 
-// Placeholder for a generic CustomerForm component
 interface CustomerFormProps {
-  initialData?: { customer_name: string; country: string; };
-  onSubmit: (data: { customer_name: string; country: string; }) => void;
+  initialData?: Customer;
+  allCountries: Country[];
+  onSubmit: (data: { customer_name: string; country: Country; }) => void;
   onCancel: () => void;
 }
 
-const CustomerForm: React.FC<CustomerFormProps> = ({ initialData, onSubmit, onCancel }) => {
+const CustomerForm: React.FC<CustomerFormProps> = ({ initialData, allCountries, onSubmit, onCancel }) => {
   const [customerName, setCustomerName] = useState(initialData?.customer_name || '');
-  const [country, setCountry] = useState(initialData?.country || '');
+  const [selectedCountryName, setSelectedCountryName] = useState(initialData?.country?.name || '');
+
+  useEffect(() => {
+    setCustomerName(initialData?.customer_name || '');
+    setSelectedCountryName(initialData?.country?.name || '');
+  }, [initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ customer_name: customerName, country });
+    const countryObject = allCountries.find(c => c.name === selectedCountryName);
+    if (!countryObject) {
+      alert('Please select a valid country.');
+      return;
+    }
+    onSubmit({ customer_name: customerName, country: countryObject });
   };
 
   return (
@@ -215,7 +224,12 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ initialData, onSubmit, onCa
         </div>
         <div>
           <label>Country:</label>
-          <input type="text" value={country} onChange={(e) => setCountry(e.target.value)} required />
+          <select value={selectedCountryName} onChange={(e) => setSelectedCountryName(e.target.value)} required>
+            <option value="">-- Select Country --</option>
+            {allCountries.map((country) => (
+              <option key={country.id} value={country.name}>{country.name}</option>
+            ))}
+          </select>
         </div>
         <button type="submit">{initialData ? 'Update' : 'Add'} Customer</button>
         <button type="button" onClick={onCancel}>Cancel</button>

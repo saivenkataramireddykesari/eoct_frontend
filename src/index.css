@@ -146,6 +146,7 @@ body {
 .header h1 {
   color: #333;
   font-size: 24px;
+  margin-bottom: 0px;
 }
 
 .header-left {
@@ -856,4 +857,24 @@ textarea {
   .mobile-table-cards {
     display: none !important;
   }
+}
+
+.edit-button {
+  background-color: #4caf50; /* Green */
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s ease;
+}
+
+.edit-button:hover {
+  background-color: #45a049;
+}
+
+.edit-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

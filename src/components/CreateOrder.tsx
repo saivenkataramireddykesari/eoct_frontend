@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { orderAPI, customerAPI, productAPI, Customer } from '../services/api';
+import { orderAPI, customerAPI, productAPI, formatErrorMessage } from '../services/api';
+import { Customer } from '../shared-types';
 import Header from './Header';
 import ProductItem from './ProductItem';
 
@@ -38,7 +39,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const [allCustomers, setAllCustomers]           = useState<any[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
   const [countries, setCountries]                 = useState<string[]>([]);
-  const [customerProducts, setCustomerProducts]   = useState<any[]>([]); // New state for products of selected customer
+
   const [selectedCustomerOrderCount, setSelectedCustomerOrderCount] = useState(0);
   const [loading, setLoading]                     = useState(false);
   const [error, setError]                         = useState('');
@@ -55,6 +56,8 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const [shippingTerms, setShippingTerms] = useState('');
   const [orderType, setOrderType]   = useState('PNS');   // PNS or PP
   const [orderCategory, setOrderCategory] = useState(''); // Drug, Nutra, Excipient
+  const [newCustomerName, setNewCustomerName]     = useState('');
+  const [isAddingNewCustomer, setIsAddingNewCustomer] = useState(false);
   const [salesQty, setSalesQty]     = useState('');
   const [freeQty, setFreeQty]       = useState('');
   const [importLicRequired, setImportLicRequired] = useState('Yes');
@@ -137,19 +140,9 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   };
 
   /* Function to fetch filtered customers */
-  const fetchFilteredCustomers = async (
-    currentCountry: string,
-    currentCategory: string,
-    currentProductSku: string,
-    currentProductName: string
-  ) => {
+  const fetchFilteredCustomers = async (currentCountry: string) => {
     try {
-      const response = await customerAPI.getCustomers(
-        currentCountry,
-        currentProductSku,
-        currentProductName,
-        currentCategory
-      );
+      const response = await customerAPI.getCustomers(currentCountry);
       setFilteredCustomers(response.data);
     } catch (err: any) { // Corrected catch syntax
       console.error("Error fetching filtered customers:", err);
@@ -161,13 +154,21 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const res = await customerAPI.getCustomers(); // Fetch all customers initially
-        const customers = res.data;
+        const [custRes, countryRes] = await Promise.all([
+          customerAPI.getCustomers(undefined, undefined, undefined, undefined, 0, 1000),
+          productAPI.getCountries()
+        ]);
+        const customers = custRes.data;
         setAllCustomers(customers);
-        const uniqueCountries: string[] = Array.from(
-          new Set(customers.map((c: any) => c.country as string))
-        ).sort() as string[];
-        setCountries(uniqueCountries);
+        if (countryRes.data && Array.isArray(countryRes.data)) {
+          const cNames = countryRes.data.map((c: any) => typeof c === 'string' ? c : c.name).sort();
+          setCountries(cNames);
+        } else {
+          const uniqueCountries: string[] = Array.from(
+            new Set(customers.map((c: any) => c.country?.name || c.country as string))
+          ).filter(Boolean).sort() as string[];
+          setCountries(uniqueCountries);
+        }
       } catch (err: any) { // Corrected catch syntax
         console.error("Error fetching initial data:", err);
         setError("Failed to load initial data (customers/countries).");
@@ -178,13 +179,13 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
 
   /* Effect to re-fetch filtered customers when relevant filters change */
   useEffect(() => {
-    // Only fetch if at least one filter is applied, otherwise show all customers
-    if (country || orderCategory || selectedProductSku || selectedProductName) {
-      fetchFilteredCustomers(country, orderCategory, selectedProductSku, selectedProductName);
+    if (country) {
+      const customersForCountry = allCustomers.filter(c => (c.country?.name || c.country) === country);
+      setFilteredCustomers(customersForCountry);
     } else {
-      setFilteredCustomers(allCustomers);
+      setFilteredCustomers([]);
     }
-  }, [country, orderCategory, selectedProductSku, selectedProductName, allCustomers]);
+  }, [country, allCustomers]);
 
 
   /* Update customer list + clear selections when country changes */
@@ -193,88 +194,54 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     setCustomerId('');
     setCustomerName('');
     setPoNumber('');
-    // setFilteredCustomers will be updated by the useEffect above
-    setCustomerProducts([]); // Clear customer products
-    setProducts([generateEmptyProduct('Not Available')]); // Clear and reset products
-    setSelectedProductSku('');
-    setSelectedProductName('');
+    setIsAddingNewCustomer(false); // Reset adding new customer state
+    setNewCustomerName('');       // Clear new customer name input
+    if (val) {
+      const customersForCountry = allCustomers.filter(c => (c.country?.name || c.country) === val);
+      setFilteredCustomers(customersForCountry);
+    } else {
+      setFilteredCustomers([]);
+    }
   };
 
   /* Update customer list + clear selections when order category changes */
   const handleOrderCategoryChange = (val: string) => {
     setOrderCategory(val);
-    setCustomerId('');
-    setCustomerName('');
-    setPoNumber('');
-    // setFilteredCustomers will be updated by the useEffect above
-    setCustomerProducts([]); // Clear customer products
-    setProducts([generateEmptyProduct('Not Available')]); // Clear and reset products
-    setSelectedProductSku('');
-    setSelectedProductName('');
   };
 
-  /* auto-generate PO number + fetch products when customer is picked */
+  /* auto-generate PO number when customer is picked */
   const handleCustomerChange = (id: string) => {
-    setCustomerId(id);
-    setProducts([generateEmptyProduct('Not Available')]); // Clear and reset products
-
-    const cust = filteredCustomers.find((c: any) => String(c.id) === id);
-    if (cust) {
-      setCustomerName(cust.customer_name);
-
-      // Fetch customer details to get order_type, default_artwork_status, order_count, category
-      customerAPI.getCustomer(parseInt(id)).then(customerDetails => {
-        const orderCount = customerDetails.data.order_count || 0;
-        setSelectedCustomerOrderCount(orderCount);
-
-        if (customerDetails.data.order_type) {
-          setOrderType(customerDetails.data.order_type); // Auto-select order type
-        }
-
-        if (customerDetails.data.category) {
-          setOrderCategory(customerDetails.data.category); // Auto-select category
-        }
-
-        // Only generate PO number if PO date is already set
-        if (poDate) {
-          setPoNumber(generatePoNumber(country, cust.customer_name, poDate, orderCount));
-        } else {
-          setPoNumber(''); // Will be generated once PO date is chosen
-        }
-
-        const defaultArtwork = customerDetails.data.default_artwork_status || 'Not Available';
-
-        // Fetch products for the selected customer
-        customerAPI.getProductsForCustomer(parseInt(id)).then(res => {
-          setCustomerProducts(res.data);
-
-          // Update the artworkStatus for the initially empty product if a default is available
-          // This assumes a new product item is generated with generateEmptyProduct() which can then be updated
-          setProducts(prevProducts => prevProducts.map(p => {
-            if (p.skuCode === '') { // Assuming the first empty product needs this default
-              return { ...p, artworkStatus: defaultArtwork };
-            }
-            return p;
-          }));
-
-        }).catch((err: any) => { // Corrected catch syntax
-          console.error('Error fetching products for customer:', err);
-          setError('Failed to load products for selected customer.');
-        });
-
-      }).catch((err: any) => { // Corrected catch syntax
-        console.error('Error fetching customer details for order defaults:', err);
-        setError('Failed to load order defaults for selected customer.');
-      });
-
+    if (id === "addNewCustomer") {
+      setIsAddingNewCustomer(true);
+      console.log("isAddingNewCustomer set to true");
+      setCustomerId(""); // Clear selected customer ID
+      setCustomerName(""); // Clear selected customer name
+      setPoNumber("");    // Clear PO number
+      setSelectedCustomerOrderCount(0); // Reset order count
+      setNewCustomerName(""); // Clear new customer name input
     } else {
-      setCustomerName('');
-      setPoNumber('');
-      setSelectedCustomerOrderCount(0);
-      setCustomerProducts([]);
-      setOrderType('PNS'); // Reset to default
-      setOrderCategory(''); // Reset to default
-      setProducts([generateEmptyProduct()]); // Clear and reset products
+      setIsAddingNewCustomer(false);
+      setCustomerId(id);
+      const cust = filteredCustomers.find((c: any) => String(c.id) === id);
+      if (cust) {
+        setCustomerName(cust.customer_name);
+        if (poDate) {
+          customerAPI.getCustomer(parseInt(id)).then(customerDetails => {
+            const orderCount = customerDetails.data.order_count || 0;
+            setSelectedCustomerOrderCount(orderCount);
+            setPoNumber(generatePoNumber(country, cust.customer_name, poDate, orderCount));
+          }).catch(err => {
+            console.error('Error fetching customer details for order count:', err);
+            setError('Failed to load customer order count.');
+          });
+        } else {
+          setPoNumber('');
+        }
+      } else {
+        setCustomerName('');
+        setPoNumber('');
+        setSelectedCustomerOrderCount(0);
+      }
     }
   };
 
@@ -290,35 +257,80 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate each product\n    for (const product of products) {\n      if (!product.skuCode.trim()) { setError(\'SKU Code is required for all products\'); return; }\n      const productTotalQty = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);\n      if (productTotalQty <= 0) { setError(\`Total quantity must be greater than 0 for product ${product.skuCode}\`); return; }\n    }\n\n    // Calculate total quantity across all products for a general check, if needed\n    const overallTotalQty = products.reduce((sum, product) => sum + ((parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0)), 0);\n    if (overallTotalQty <= 0) { setError(\'At least one product must have a total quantity greater than 0\'); return; }
+
+    console.log("handleSubmit called.");
+    console.log("isAddingNewCustomer:", isAddingNewCustomer);
+    console.log("newCustomerName:", newCustomerName);
+
+    // Input validation
+    if (!country) { setError('Please select a country.'); return; }
+    if (isAddingNewCustomer && !newCustomerName.trim()) { setError('Please enter a new customer name.'); return; }
+    if (!customerId && !isAddingNewCustomer) { setError('Please select an existing customer or add a new one.'); return; }
+
+    // Validate each product
+    for (const product of products) {
+      if (!product.skuCode.trim()) { setError('SKU Code is required for all products'); return; }
+      const productTotalQty = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);
+      if (productTotalQty <= 0) { setError(`Total quantity must be greater than 0 for product ${product.skuCode}`); return; }
+    }
+
+    // Calculate total quantity across all products for a general check, if needed
+    const overallTotalQty = products.reduce((sum, product) => sum + ((parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0)), 0);
+    if (overallTotalQty <= 0) { setError('At least one product must have a total quantity greater than 0'); return; }
+
     setLoading(true); setError(''); setSuccess('');
+    let currentCustomerId = customerId;
+    let currentCustomerName = customerName;
+
     try {
-      /* 1. Create product (if not already existing/updated) - for now, we just pass the selected product's details */
-      // In a real scenario, you might want to check if the product already exists and update it if needed.
-      // For this cascading dropdown, we assume the selected product already exists in the database
-      // and we are just passing its details to the order. If the product details can be modified here,
-      // then you would make an update call or a create call if it's a new product. For now, we will
-      // keep the existing product create API call, but understand that the actual product might already exist.
-      
-      // The createProduct API is meant to create a new product. If the SKU is selected from existing products,
-      // we should not be calling createProduct, but rather ensuring the product details are correct
-      // or just passing the SKU to the order creation. Given the current setup, it looks like `createOrder`
-      // expects an existing SKU. I will remove the `createProduct` call and assume the product exists based on selected SKU.
+      if (isAddingNewCustomer) {
+        console.log("Attempting to add new customer...");
+        // 1. Check for duplicate customer name in the selected country
+        const duplicateCustomer = allCustomers.find(
+          (c: any) => c.country?.name === country && c.customer_name.toLowerCase() === newCustomerName.trim().toLowerCase()
+        );
+
+        if (duplicateCustomer) {
+          setError(`Customer '${newCustomerName}' already exists in ${country || ""}.`);
+          setLoading(false);
+          return;
+        }
+
+        // 2. Create new customer
+        const newCustData = { customer_name: newCustomerName.trim(), country: country };
+        console.log("Calling customerAPI.createCustomer with:", newCustData);
+        const res = await customerAPI.createCustomer(newCustData);
+        const createdCustomer = res.data;
+        console.log("New customer created:", createdCustomer);
+
+        // Update states to reflect new customer
+        setAllCustomers(prev => [...prev, createdCustomer]);
+        setFilteredCustomers(prev => [...prev, createdCustomer]);
+        setCustomerId(String(createdCustomer.id));
+        setCustomerName(createdCustomer.customer_name);
+        currentCustomerId = String(createdCustomer.id);
+        currentCustomerName = createdCustomer.customer_name;
+
+        setIsAddingNewCustomer(false);
+        setNewCustomerName("");
+
+        setSuccess(`New customer '${createdCustomer.customer_name}' added successfully.`);
+      }
 
       /* 2. Create order */
       const createdOrderNumbers: string[] = [];
 
-      console.log("Customer Products available:", customerProducts);
+
 
       for (const product of products) {
         const productTotalQty = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);
-        
+
         console.log(`Creating order for product ID: ${product.id}, SKU Code: ${product.skuCode}, Sales Quantity: ${product.salesQty}, Free Quantity: ${product.freeQty}`);
         console.log("Full product data being sent:", product);
 
         const res = await orderAPI.createOrder({
           country,
-          customer_id: parseInt(customerId),
+          customer_id: parseInt(currentCustomerId),
           sku: product.skuCode,
           order_type: orderType,
           category: orderCategory || null,
@@ -341,7 +353,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
       setSuccess(`✅ Orders created successfully! Order No(s): ${createdOrderNumbers.join(', ')}`);
       setTimeout(() => navigate('/orders'), 2500);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Error creating order');
+      setError(formatErrorMessage(err, 'Error creating order'));
     } finally { setLoading(false); }
   };
 
@@ -405,11 +417,29 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
               </div>
               <div style={fld}>
                 <label style={lbl}>Customer Name *</label>
-                <select value={customerId} onChange={e => handleCustomerChange(e.target.value)}
-                  required disabled={!country} style={country ? inp : inpDis}>
+                <select
+                  value={isAddingNewCustomer ? "addNewCustomer" : customerId}
+                  onChange={e => handleCustomerChange(e.target.value)}
+                  required
+                  disabled={!country}
+                  style={country ? inp : inpDis}
+                >
                   <option value="">{country ? '— Select Customer —' : 'Select Country first'}</option>
                   {filteredCustomers.map(c => <option key={c.id} value={c.id}>{c.customer_name}</option>)}
+                  {!(user.department === 'Exports' && user.role === 'Team') && (
+                    <option value="addNewCustomer">— Add New Customer —</option>
+                  )}
                 </select>
+                {isAddingNewCustomer && (
+                  <input
+                    type="text"
+                    value={newCustomerName}
+                    onChange={e => setNewCustomerName(e.target.value)}
+                    placeholder="Enter new customer name"
+                    style={{ ...inp, marginTop: '8px' }}
+                    required
+                  />
+                )}
               </div>
               <div style={fld}>
                 <label style={lbl}>PO Date *</label>
@@ -442,7 +472,8 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
                   style={inp} placeholder="e.g. FOB Mumbai" />
               </div>
             </div>
-            {/* Order Type & Category */}
+            {/* Order Type & Category (Commented out per request) */}
+            {/*
             <div style={{ ...grid2, marginTop: '16px' }}>
               <div style={fld}>
                 <label style={lbl}>Order Type *</label>
@@ -461,6 +492,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
                 </select>
               </div>
             </div>
+            */}
           </div>
 
           {/* ── All Other Details ── */}
@@ -471,12 +503,13 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
             <ProductItem
                 key={product.id}
                 product={product}
-                customerProducts={customerProducts}
                 onUpdate={handleUpdateProduct}
                 onUpdateMany={handleUpdateManyProducts}
                 onRemove={handleRemoveProduct}
                 errors={{}}
-                currencies={CURRENCIES}  
+                currencies={CURRENCIES}
+                selectedCountry={country}
+                selectedCustomerId={customerId}
               />
             ))}
 

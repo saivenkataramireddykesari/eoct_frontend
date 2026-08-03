@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { registrationAPI, productAPI } from '../services/api';
+import { registrationAPI, productAPI, formatErrorMessage } from '../services/api';
 import Header from './Header';
+import { Country } from '../shared-types';
 
 interface RegistrationsProps {
   user: any;
@@ -10,7 +11,7 @@ interface RegistrationsProps {
 const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [filteredSkus, setFilteredSkus] = useState<any[]>([]);
-  const [countries, setCountries] = useState<string[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formError, setFormError] = useState('');
@@ -38,7 +39,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   const fetchCountries = async () => {
     try {
       const response = await registrationAPI.getCountries();
-      setCountries(response.data.countries || []);
+      setCountries(response.data || []);
     } catch (error) {
       console.error('Error fetching countries:', error);
     }
@@ -61,16 +62,18 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
 
   // Country change → immediately load SKUs for that country and reset SKU
   const handleCountryChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const country = e.target.value;
-    setFormData(prev => ({ ...prev, country, sku: '' }));
+    const countryName = e.target.value;
+    setFormData(prev => ({ ...prev, country: countryName, sku: '' }));
     setFilteredSkus([]);
     setFormError('');
-    if (country) {
+    if (countryName) {
       try {
-        const response = await productAPI.getProductsByCountry(country);
-        setFilteredSkus(response.data);
+        const selectedCountryObj = countries.find(c => c.name === countryName);
+        const countryId = selectedCountryObj ? selectedCountryObj.id : countryName;
+        const response = await productAPI.getProductsByCountry(countryId);
+        setFilteredSkus(response.data || []);
       } catch (error) {
-        console.error(`Error fetching products for ${country}:`, error);
+        console.error(`Error fetching products for ${countryName}:`, error);
         setFilteredSkus([]);
       }
     }
@@ -102,11 +105,10 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
       });
       setShowModal(false);
       resetForm();
-    setIsRegistrationAutoFilled(false);
+      setIsRegistrationAutoFilled(false);
       fetchData();
     } catch (error: any) {
-      const msg = error?.response?.data?.detail || 'Error creating registration';
-      setFormError(msg);
+      setFormError(formatErrorMessage(error, 'Error creating registration'));
     } finally {
       setSubmitting(false);
     }
@@ -180,7 +182,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                       : 'inherit',
                   }}
                 >
-                  <td>{reg.country}</td>
+                  <td>{reg.country?.name || "-"}</td>
                   <td>{reg.sku}</td>
                   <td>{reg.product?.product_name}</td>
                   <td>{reg.registration_number}</td>
@@ -228,7 +230,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
             >
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Country</span>
-                <span className="mobile-card-value">{reg.country}</span>
+                <span className="mobile-card-value">{reg.country?.name || "-"}</span>
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">SKU</span>
@@ -347,7 +349,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                 >
                   <option value="">— Select Country —</option>
                   {countries.map((country) => (
-                    <option key={country} value={country}>{country}</option>
+                    <option key={country.id} value={country.name}>{country.name}</option>
                   ))}
                 </select>
               </div>
@@ -365,7 +367,9 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
 
                     if (formData.country && sku) {
                       try {
-                        const response = await registrationAPI.getRegistrationByCountryAndSku(formData.country, sku);
+                        const selectedCountryObj = countries.find(c => c.name === formData.country);
+                        const countryId = selectedCountryObj ? selectedCountryObj.id : formData.country;
+                        const response = await registrationAPI.getRegistrationByCountryAndSku(countryId, sku);
                         if (response.data && Object.keys(response.data).length > 0) {
                           const registration = response.data;
                           setFormData(prev => ({
@@ -407,8 +411,8 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                 >
                   <option value="">— Select SKU —</option>
                   {filteredSkus.map((product) => (
-                    <option key={product.sku_code} value={product.sku_code}>
-                      {product.sku_code} - {product.product_name}
+                    <option key={product.id || product.sku_code} value={product.sku_code}>
+                      {product.sku_code} — {product.product_name} {product.customer ? `(Customer: ${product.customer})` : ''}
                     </option>
                   ))}
                 </select>
