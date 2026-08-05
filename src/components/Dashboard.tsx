@@ -263,78 +263,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       {renderStats()}
 
       {/* ── Exports: Add Customer Quick Panel ─────────────────────────────── */}
-      {user.department === 'Exports' && (
-        <div style={panel}>
-          <div style={panelHeader}>
-            <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#1a237e' }}>👥 Customer Management</h2>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                className="submit-button"
-                onClick={() => setShowCustomerForm(!showCustomerForm)}
-              >
-                {showCustomerForm ? '✕ Cancel' : '+ Add Customer'}
-              </button>
-              <button className="nav-button" onClick={() => navigate('/customers')}>
-                View All Customers
-              </button>
-            </div>
-          </div>
 
-          {showCustomerForm && (
-            <form onSubmit={handleCustomerSubmit}>
-              <div style={grid2}>
-                <div style={fld}>
-                  <label style={lbl}>Customer Name *</label>
-                  <input style={inp} type="text" required
-                    value={customerForm.customer_name}
-                    onChange={e => setCustomerForm({ ...customerForm, customer_name: e.target.value })}
-                    placeholder="e.g. Pharma Corp Ltd" />
-                </div>
-                <div style={fld}>
-                  <label style={lbl}>Country *</label>
-                  <input style={inp} type="text" required
-                    value={customerForm.country}
-                    onChange={e => setCustomerForm({ ...customerForm, country: e.target.value })}
-                    placeholder="e.g. Kenya" />
-                </div>
-                <div style={fld}>
-                  <label style={lbl}>Payment Terms</label>
-                  <input style={inp} type="text"
-                    value={customerForm.payment_terms}
-                    onChange={e => setCustomerForm({ ...customerForm, payment_terms: e.target.value })}
-                    placeholder="e.g. Net 30, Net 45" />
-                </div>
-                <div style={fld}>
-                  <label style={lbl}>Agreement Status</label>
-                  <select style={inp} value={customerForm.agreement_status}
-                    onChange={e => setCustomerForm({ ...customerForm, agreement_status: e.target.value })}>
-                    <option value="Active">Active</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Expired">Expired</option>
-                  </select>
-                </div>
-                <div style={fld}>
-                  <label style={lbl}>Agreement Validity</label>
-                  <input style={inp} type="date"
-                    value={customerForm.agreement_validity}
-                    onChange={e => setCustomerForm({ ...customerForm, agreement_validity: e.target.value })} />
-                </div>
-              </div>
-              {customerMsg && (
-                <p style={{ marginTop: '12px', color: customerMsg.startsWith('✅') ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-                  {customerMsg}
-                </p>
-              )}
-              <div style={btnRow}>
-                <button type="submit" className="submit-button" disabled={customerSubmitting}>
-                  {customerSubmitting ? 'Saving…' : '✅ Save Customer'}
-                </button>
-                <button type="button" className="nav-button" onClick={() => setShowCustomerForm(false)}>Cancel</button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
 
       {/* ── Regulatory: Add Registration Quick Panel ───────────────────────── */}
       {user.department === 'Regulatory' && (
@@ -342,6 +271,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
           <div style={panelHeader}>
             <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#1a237e' }}>📋 Registration Management</h2>
             <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="submit-button"
+                onClick={() => setShowRegForm(!showRegForm)}
+              >
+                {showRegForm ? '✕ Cancel' : '+ Add Registration'}
+              </button>
               <button className="nav-button" onClick={() => navigate('/registrations')}>
                 View All Registrations
               </button>

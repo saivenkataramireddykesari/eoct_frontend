@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval } from "../shared-types";
 
-const API_URL = 'https://eoct-backend.onrender.com/api';
+const API_URL = 'http://localhost:8000/api';
 
-//
+//https://eoct-backend.onrender.com
 
 const api = axios.create({
   baseURL: API_URL,
@@ -91,8 +91,8 @@ export const productAPI = {
   getCountries: () => api.get<Country[]>('/countries'),
   searchProductsBySku: (query: string) => api.get(`/products/search-sku`, { params: { query } }),
   getLastSku: () => api.get(`/products/last-sku`),
-  checkDuplicate: (category: string, country_name: string, customer: string, pack_size: string) => 
-    api.get(`/products/check-duplicate`, { params: { category, country_name, customer, pack_size } }),
+  checkDuplicate: (category: string, country_id: number, customer: string, pack_size: string) => 
+    api.get(`/products/check-duplicate`, { params: { category, country_id, customer, pack_size } }),
 };
 
 

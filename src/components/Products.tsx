@@ -15,6 +15,21 @@ interface SkuSuggestion {
 
 const DEFAULT_CATEGORIES = ["PP", "PNS"];
 
+interface ProductFormData {
+  sku_code: string;
+  product_name: string;
+  category: string;
+  country_id: number | null;
+  customer: string;
+  pack_size: string;
+  standard_batch_size: string;
+  moq: string;
+  primary_pm_code: string;
+  secondary_pm_code: string;
+  leaf_pm_code: string;
+  artwork_status: string;
+}
+
 const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,11 +66,11 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editProductId, setEditProductId] = useState<number | null>(null); // To store the ID of the product being edited
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ProductFormData>({
     sku_code: '',
     product_name: '',
     category: '',
-    country: '',
+    country_id: null,
     customer: '',
     pack_size: '',
     standard_batch_size: '',
@@ -108,11 +123,11 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     let filtered = customers;
-    if (formData.country) {
-      filtered = filtered.filter(c => c.country?.name === formData.country);
+    if (formData.country_id) {
+      filtered = filtered.filter(c => c.country?.id === formData.country_id);
     }
     setFilteredCustomers(filtered);
-  }, [formData.country, customers]);
+  }, [formData.country_id, customers]);
 
   const fetchProducts = async (p: number = page, scmUserType?: string) => {
     try {
@@ -133,7 +148,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       sku_code: '',
       product_name: '',
       category: '',
-      country: '',
+      country_id: null,
       customer: '',
       pack_size: '',
       standard_batch_size: '',
@@ -162,9 +177,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     const checkDuplicate = async () => {
-      if (formData.category && formData.country && formData.customer && formData.pack_size) {
+      if (formData.category && formData.country_id && formData.customer && formData.pack_size) {
         try {
-          const res = await productAPI.checkDuplicate(formData.category, formData.country, formData.customer, formData.pack_size);
+          const res = await productAPI.checkDuplicate(formData.category, formData.country_id, formData.customer, formData.pack_size);
           if (res.data.is_duplicate) {
             alert(`Duplicate product found with SKU: ${res.data.sku}. You cannot create duplicates.`);
             setFormData(prev => ({ ...prev, pack_size: '' })); // Block duplicate by clearing pack size
@@ -177,7 +192,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     if (showModal) {
       checkDuplicate();
     }
-  }, [formData.category, formData.country, formData.customer, formData.pack_size, showModal]);
+  }, [formData.category, formData.country_id, formData.customer, formData.pack_size, showModal]);
 
   const handleProductSelect = async (selected: SkuSuggestion) => {
     setFormData({ ...formData, product_name: selected.product_name });
@@ -192,7 +207,8 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
           ...response.data,
           standard_batch_size: response.data.standard_batch_size || '',
           moq: response.data.moq || '',
-          sku_code: response.data.sku_code + (response.data.country?.name || ''),
+          sku_code: response.data.sku_code,
+          country_id: response.data.country?.id || null,
         });
         // We do NOT set isEditMode = true. It will always be added as a new product.
         setIsEditMode(false);
@@ -734,13 +750,14 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               <div className="form-group">
                 <label>Country *</label>
                 <select
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                  value={formData.country_id !== null ? String(formData.country_id) : ""}
+                  onChange={(e) => setFormData({ ...formData, country_id: parseInt(e.target.value) })}
+
                   required
                 >
                   <option value="">— Select Country —</option>
                   {countries.map((country) => (
-                    <option key={country.id} value={country.name}>{country.name}</option>
+                    <option key={country.id} value={country.id}>{country.name}</option>
                   ))}
                 </select>
               </div>
@@ -751,9 +768,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   value={formData.customer}
                   onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
                   required
-                  disabled={!formData.country}
+                  disabled={!formData.country_id}
                 >
-                  <option value="">{formData.country ? "— Select Customer —" : "Select Country First"}</option>
+                  <option value="">{formData.country_id ? "— Select Customer —" : "Select Country First"}</option>
                   {filteredCustomers.map((c) => (
                     <option key={c.id} value={c.customer_name}>{c.customer_name}</option>
                   ))}

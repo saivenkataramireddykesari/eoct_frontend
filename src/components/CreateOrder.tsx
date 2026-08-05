@@ -282,6 +282,19 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     let currentCustomerId = customerId;
     let currentCustomerName = customerName;
 
+    // --- Obtain country_id ---
+    const customerWithSelectedCountry = allCustomers.find(
+      (cust: any) => (cust.country?.name || cust.country) === country
+    );
+
+    if (!customerWithSelectedCountry || !customerWithSelectedCountry.country || !customerWithSelectedCountry.country.id) {
+      setError('Could not determine country ID. Please select a valid country.');
+      setLoading(false);
+      return;
+    }
+    const countryIdToSend = customerWithSelectedCountry.country.id;
+    // --- End obtain country_id ---
+
     try {
       if (isAddingNewCustomer) {
         console.log("Attempting to add new customer...");
@@ -325,15 +338,12 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
       for (const product of products) {
         const productTotalQty = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);
 
-        console.log(`Creating order for product ID: ${product.id}, SKU Code: ${product.skuCode}, Sales Quantity: ${product.salesQty}, Free Quantity: ${product.freeQty}`);
         console.log("Full product data being sent:", product);
 
         const res = await orderAPI.createOrder({
-          country,
+          country_id: countryIdToSend,
           customer_id: parseInt(currentCustomerId),
           sku: product.skuCode,
-          order_type: orderType,
-          category: orderCategory || null,
           po_number: poNumber,
           po_date: poDate || null,
           requested_delivery_date: requestedDate || null,
@@ -468,8 +478,13 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
               </div>
               <div style={fld}>
                 <label style={lbl}>Shipping Terms</label>
-                <input type="text" value={shippingTerms} onChange={e => setShippingTerms(e.target.value)}
-                  style={inp} placeholder="e.g. FOB Mumbai" />
+                <input
+                  type="text"
+                  value={shippingTerms}
+                  onChange={e => setShippingTerms(e.target.value)}
+                  style={inp}
+                  placeholder="e.g. FOB Mumbai"
+                />
               </div>
             </div>
             {/* Order Type & Category (Commented out per request) */}
@@ -544,8 +559,13 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
                 {importLicRequired === 'Yes' && (
                   <div style={fld}>
                     <label style={lbl}>License Validity *</label>
-                    <input type="date" value={importLicValidity}
-                      onChange={e => setImportLicValidity(e.target.value)} required style={inp} />
+                    <input
+                      type="date"
+                      value={importLicValidity}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImportLicValidity(e.target.value)}
+                      required
+                      style={inp}
+                    />
                   </div>
                 )}
               </div>
@@ -554,8 +574,13 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
             {/* ── 5. Remarks (Global) ── */}
             <div style={{...card, marginTop: '20px'}}>
               <div style={cardTitle}>💬 Remarks</div>
-              <textarea value={remarks} onChange={e => setRemarks(e.target.value)}
-                rows={3} style={{ ...inp, resize: 'vertical' }} placeholder="Any additional notes..." />
+              <textarea
+                value={remarks}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRemarks(e.target.value)}
+                rows={3}
+                style={{ ...inp, resize: 'vertical' }}
+                placeholder="Any additional notes..."
+              />
             </div>
           </div>
 

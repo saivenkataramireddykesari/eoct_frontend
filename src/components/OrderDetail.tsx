@@ -53,7 +53,9 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         milestone_id: m.id,
         target_date: bulkTargetDates[m.id] || null,
       }));
-      await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
+      console.log('Sending bulk target dates update data:', milestonesPayload);
+      const response = await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
+      console.log('Bulk target dates update response:', response.data);
       setBulkTargetModal(false);
       fetchOrder();
     } catch (error: any) {
@@ -164,10 +166,12 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         target_date: milestoneData.target_date || null, // Convert empty string to null
         actual_date: milestoneData.actual_date || null, // Convert empty string to null
       };
-      await orderAPI.updateMilestone(
+      console.log('Sending milestone update data:', dataToSend);
+      const response = await orderAPI.updateMilestone(
         selectedMilestone.id,
         dataToSend
       );
+      console.log('Milestone update response:', response.data);
       setMilestoneModal(false);
       fetchOrder();
     } catch (error) {
@@ -608,15 +612,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         <div style={{ marginTop: '30px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Execution Milestones</h3>
-            {(user.department === 'SCM' || user.department === 'Exports' || user.department === 'Exports Team' || user.department?.startsWith('Exports')) && (
-              <button
-                className="submit-button"
-                style={{ background: '#3f51b5', borderColor: '#3f51b5' }}
-                onClick={openBulkTargetModal}
-              >
-                📅 Set Target Dates (All Milestones)
-              </button>
-            )}
+
           </div>
 
           
