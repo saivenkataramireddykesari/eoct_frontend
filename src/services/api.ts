@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval } from "../shared-types";
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = 'https://eoct-backend.onrender.com/api';
 
-//https://eoct-backend.onrender.com
+//
 
 const api = axios.create({
   baseURL: API_URL,
