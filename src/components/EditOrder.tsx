@@ -56,11 +56,17 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
   useEffect(() => { fetchAll(); }, [id]);
 
   const fetchAll = async () => {
+    const orderIdNum = parseInt(id || '');
+    if (!id || isNaN(orderIdNum)) {
+      setLoadingDetails(false);
+      setError('Invalid Order ID');
+      return;
+    }
     try {
       setLoadingDetails(true);
       const [custRes, orderRes] = await Promise.all([
         customerAPI.getCustomers(),
-        orderAPI.getOrder(parseInt(id!)),
+        orderAPI.getOrder(orderIdNum),
       ]);
 
       const customers = custRes.data;

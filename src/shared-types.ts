@@ -1,5 +1,3 @@
-// frontend/src/shared-types.ts
-
 export interface Country {
   id: number;
   name: string;
@@ -253,4 +251,14 @@ export interface ProductSearchItem {
 
 export interface ProductSearchResponse {
   products: ProductSearchItem[];
+}
+
+export interface SearchSuggestion {
+  type: string;  // e.g., "product", "customer", "order"
+  id: string;    // e.g., SKU code, customer ID, order ID
+  name: string;  // e.g., Product Name, Customer Name
+}
+
+export interface SearchSuggestionsResponse {
+  suggestions: SearchSuggestion[];
 }

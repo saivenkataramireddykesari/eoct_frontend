@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval } from "../shared-types";
+import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse } from "../shared-types";
 
-const API_URL = 'https://eoct-backend.onrender.com/api';
+const API_URL = 'http://localhost:8000/api';
 
-//
+//https://eoct-backend.onrender.com
 
 const api = axios.create({
   baseURL: API_URL,
@@ -72,7 +72,7 @@ export const orderAPI = {
 // Product APIs
 export const productAPI = {
   getProducts: (skip: number = 0, limit: number = 20, scmUserType?: string) => api.get('/products', { params: { skip, limit, scm_user_type: scmUserType } }),
-  getProductsByCountry: (countryId: number | string) => api.get(`/products/by-country/${countryId}`),
+  getProductsByCountry: (countryName: string) => api.get<ProductSearchItem[]>(`/skus/${countryName}`),
   createProduct: (data: any) => api.post('/products', data),
   getProductBySku: (sku: string) => api.get(`/products/sku/${sku}`), // New endpoint for fetching by SKU
   updateProduct: (id: number, data: any) => api.put(`/products/${id}`, data), // New endpoint for updating product
@@ -86,10 +86,10 @@ export const productAPI = {
   getPmRequests: () => api.get('/products/pm-requests'),
   requestPmCode: (sku: string) => api.post(`/products/${sku}/pm-requests`),
   submitPmCode: (requestId: number, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string, remarks?: string) => api.post(`/products/pm-requests/${requestId}/submit`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, remarks }),
-  decidePmCode: (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string) => api.post(`/products/pm-requests/${requestId}/decide`, { decision, remarks }),
+  decidePmCode: (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string, primaryPmCode?: string, secondaryPmCode?: string, leafPmCode?: string, artworkStatus?: string) => api.post(`/products/pm-requests/${requestId}/decide`, { decision, remarks, primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, artwork_status: artworkStatus }),
   getCategories: () => api.get('/categories'),
   getCountries: () => api.get<Country[]>('/countries'),
-  searchProductsBySku: (query: string) => api.get(`/products/search-sku`, { params: { query } }),
+  searchProducts: (query: string) => api.get<ProductSearchResponse>(`/products/search`, { params: { query } }),
   getLastSku: () => api.get(`/products/last-sku`),
   checkDuplicate: (category: string, country_id: number, customer: string, pack_size: string) => 
     api.get(`/products/check-duplicate`, { params: { category, country_id, customer, pack_size } }),
@@ -144,6 +144,11 @@ export const alertAPI = {
 // Audit Log APIs
 export const auditAPI = {
   getAuditLogs: (orderId?: number, skip: number = 0, limit: number = 20) => api.get('/audit-logs', { params: { order_id: orderId, skip, limit } }),
+};
+
+// Search APIs
+export const searchAPI = {
+  getSuggestions: (query: string) => api.get<SearchSuggestionsResponse>('/search/suggestions', { params: { query } }),
 };
 
 export const formatErrorMessage = (err: any, fallback: string = 'An error occurred'): string => {

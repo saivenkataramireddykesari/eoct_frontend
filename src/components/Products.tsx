@@ -60,6 +60,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     primaryPmCode: string;
     secondaryPmCode: string;
     leafPmCode: string;
+    artworkStatus: string;
   } | null>(null);
   const [acceptRemarks, setAcceptRemarks] = useState('');
 
@@ -228,7 +229,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     if (name.length > 2) {
       searchTimeoutRef.current = setTimeout(async () => {
         try {
-          const res = await productAPI.searchProductsBySku(name);
+          const res = await productAPI.searchProducts(name);
           setSkuSuggestions(res.data.products || []);
           setShowSuggestions(true);
         } catch (e) {
@@ -287,9 +288,17 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
   };
 
-  const handleDecidePmCode = async (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string) => {
+  const handleDecidePmCode = async (
+    requestId: number,
+    decision: 'ACCEPT' | 'REJECT',
+    remarks?: string,
+    primaryPmCode?: string,
+    secondaryPmCode?: string,
+    leafPmCode?: string,
+    artworkStatus?: string
+  ) => {
     try {
-      await productAPI.decidePmCode(requestId, decision, remarks);
+      await productAPI.decidePmCode(requestId, decision, remarks, primaryPmCode, secondaryPmCode, leafPmCode, artworkStatus);
       fetchProducts();
     } catch (error: any) {
       alert(error.response?.data?.detail || 'Error submitting decision');
@@ -444,7 +453,8 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                               requestId: latestRequest.id,
                               primaryPmCode: latestRequest.current_primary_pm_code || latestRequest.current_pm_code || '',
                               secondaryPmCode: latestRequest.current_secondary_pm_code || '',
-                              leafPmCode: latestRequest.current_leaf_pm_code || ''
+                              leafPmCode: latestRequest.current_leaf_pm_code || '',
+                              artworkStatus: product.artwork_status === 'Available' ? 'Available' : 'Available'
                             })}
                           >
                             Accept ({latestRequest.current_primary_pm_code || latestRequest.current_pm_code})
@@ -613,7 +623,8 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                           requestId: latestRequest.id,
                           primaryPmCode: latestRequest.current_primary_pm_code || latestRequest.current_pm_code || '',
                           secondaryPmCode: latestRequest.current_secondary_pm_code || '',
-                          leafPmCode: latestRequest.current_leaf_pm_code || ''
+                          leafPmCode: latestRequest.current_leaf_pm_code || '',
+                          artworkStatus: product.artwork_status === 'Available' ? 'Available' : 'Available'
                         })}
                       >
                         Accept ({latestRequest.current_primary_pm_code || latestRequest.current_pm_code})
@@ -901,43 +912,97 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
         </div>
       )}
 
-      {/* Accept PM Code Modal for Regulatory */}
+      {/* Accept PM Code & Update Artwork Status Modal for Regulatory */}
       {acceptModal && (
         <div className="modal-overlay" onClick={() => { setAcceptModal(null); setAcceptRemarks(''); }}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Accept PM Code Request</h2>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <h2 style={{ margin: '0 0 12px 0', color: '#1a237e' }}>Accept PM Code & Update Artwork</h2>
+            
             <div style={{
               background: '#e8f5e9',
               border: '1px solid #4caf50',
-              borderRadius: '6px',
+              borderRadius: '8px',
               padding: '14px 18px',
               marginBottom: '16px',
               fontSize: '0.95em',
               color: '#2e7d32'
             }}>
-              <p style={{ margin: '0 0 8px 0', fontWeight: 'bold' }}>Please review the PM Codes submitted by the Artwork team:</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: '#ffffff', padding: '10px 14px', borderRadius: '4px', border: '1px solid #c8e6c9' }}>
-                <div><strong>Primary PM Code *:</strong> <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1b5e20' }}>{acceptModal.primaryPmCode || 'N/A'}</span></div>
-                <div><strong>Secondary PM Code:</strong> <span style={{ fontFamily: 'monospace', color: acceptModal.secondaryPmCode ? '#1b5e20' : '#777' }}>{acceptModal.secondaryPmCode || '—'}</span></div>
-                <div><strong>Leaf PM Code:</strong> <span style={{ fontFamily: 'monospace', color: acceptModal.leafPmCode ? '#1b5e20' : '#777' }}>{acceptModal.leafPmCode || '—'}</span></div>
+              <p style={{ margin: '0 0 10px 0', fontWeight: 'bold' }}>Update PM Codes and Artwork Status before approving:</p>
+              
+              <div className="form-group" style={{ marginBottom: '10px' }}>
+                <label style={{ fontWeight: 600, color: '#1b5e20' }}>Artwork Status *</label>
+                <select
+                  value={acceptModal.artworkStatus}
+                  onChange={(e) => setAcceptModal({ ...acceptModal, artworkStatus: e.target.value })}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #a5d6a7' }}
+                >
+                  <option value="Available">Available</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Not Available">Not Available</option>
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '10px' }}>
+                <label style={{ fontWeight: 600, color: '#1b5e20' }}>Primary PM Code *</label>
+                <input
+                  type="text"
+                  value={acceptModal.primaryPmCode}
+                  onChange={(e) => setAcceptModal({ ...acceptModal, primaryPmCode: e.target.value })}
+                  placeholder="Primary PM Code"
+                  required
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #a5d6a7', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '10px' }}>
+                <label style={{ fontWeight: 600, color: '#1b5e20' }}>Secondary PM Code</label>
+                <input
+                  type="text"
+                  value={acceptModal.secondaryPmCode}
+                  onChange={(e) => setAcceptModal({ ...acceptModal, secondaryPmCode: e.target.value })}
+                  placeholder="Secondary PM Code"
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #a5d6a7', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '0' }}>
+                <label style={{ fontWeight: 600, color: '#1b5e20' }}>Leaf PM Code</label>
+                <input
+                  type="text"
+                  value={acceptModal.leafPmCode}
+                  onChange={(e) => setAcceptModal({ ...acceptModal, leafPmCode: e.target.value })}
+                  placeholder="Leaf PM Code"
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #a5d6a7', boxSizing: 'border-box' }}
+                />
               </div>
             </div>
+
             <div className="form-group">
-              <label>Remarks (Optional)</label>
+              <label>Approval Remarks (Optional)</label>
               <textarea
                 value={acceptRemarks}
                 onChange={(e) => setAcceptRemarks(e.target.value)}
                 placeholder="Enter approval remarks..."
-                rows={3}
-                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '4px', padding: '8px' }}
+                rows={2}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '6px', padding: '8px' }}
               />
             </div>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+            
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
               <button 
                 className="submit-button" 
                 style={{ background: '#4caf50', borderColor: '#4caf50' }}
+                disabled={!acceptModal.primaryPmCode.trim()}
                 onClick={() => {
-                  handleDecidePmCode(acceptModal.requestId, 'ACCEPT', acceptRemarks);
+                  handleDecidePmCode(
+                    acceptModal.requestId, 
+                    'ACCEPT', 
+                    acceptRemarks, 
+                    acceptModal.primaryPmCode, 
+                    acceptModal.secondaryPmCode, 
+                    acceptModal.leafPmCode, 
+                    acceptModal.artworkStatus
+                  );
                   setAcceptModal(null);
                   setAcceptRemarks('');
                 }}

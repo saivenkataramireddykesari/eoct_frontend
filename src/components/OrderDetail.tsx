@@ -34,6 +34,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     remarks: '',
   });
   const [milestoneHistory, setMilestoneHistory] = useState<any[]>([]);
+  const [showMilestoneHistoryModal, setShowMilestoneHistoryModal] = useState(false);
   const [bulkTargetModal, setBulkTargetModal] = useState(false);
   const [bulkTargetDates, setBulkTargetDates] = useState<{ [milestoneId: number]: string }>({});
 
@@ -85,21 +86,26 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   }, [selectedMilestone]);
 
   const fetchOrder = async () => {
+    const orderIdNum = parseInt(id || '');
+    if (!id || isNaN(orderIdNum)) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const response = await orderAPI.getOrder(parseInt(id!));
+      const response = await orderAPI.getOrder(orderIdNum);
       setOrder(response.data);
       
       // Fetch audit logs
       try {
-        const auditResponse = await auditAPI.getAuditLogs(parseInt(id!));
+        const auditResponse = await auditAPI.getAuditLogs(orderIdNum);
         setAuditLogs(auditResponse.data);
       } catch (err) {
         console.error('Error fetching audit logs:', err);
       }
       
       // Check if user can approve based on sequential workflow
-      await checkCanApprove();
+      await checkCanApprove(orderIdNum);
     } catch (error) {
       console.error('Error fetching order:', error);
     } finally {
@@ -107,9 +113,9 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     }
   };
 
-  const checkCanApprove = async () => {
+  const checkCanApprove = async (orderIdNum: number) => {
     try {
-      const response = await orderAPI.canApproveOrder(parseInt(id!));
+      const response = await orderAPI.canApproveOrder(orderIdNum);
       setCanApproveStatus(response.data);
     } catch (error) {
       console.error('Error checking can approve:', error);
@@ -120,9 +126,14 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   const handleApprovalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Remarks are mandatory for SCM override OR rejection
+    if (user.department === 'Regulatory' && approvalData.decision === 'APPROVED' && !approvalData.regulatory_action) {
+      alert('Regulatory action is mandatory for Regulatory department approval.');
+      return;
+    }
+
+    // Remarks are mandatory for SCM override OR rejection OR Regulatory approval
     const needsRemarks =
-      user.department === 'SCM' || approvalData.decision === 'REJECTED';
+      user.department === 'SCM' || approvalData.decision === 'REJECTED' || (user.department === 'Regulatory' && approvalData.decision === 'APPROVED');
     if (needsRemarks && !approvalData.remarks.trim()) {
       alert(
         user.department === 'SCM'
@@ -275,10 +286,12 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     }
 
     // For Exports Manager
-    const isExportsManager = user.department === 'Exports' && user.role?.toLowerCase() === 'manager';
+    const isExportsManager = user.department === 'Exports';
     if (isExportsManager) {
+      // Exports Manager handles initial (sequence 1) and final (sequence 4) approvals.
       return (
-        canApproveStatus?.is_exports_override === true &&
+        (approval.department === 'EXPORTS_MANAGER_INITIAL' || approval.department === 'EXPORTS_MANAGER_FINAL') &&
+        canApproveStatus?.can_approve === true &&
         approval.sequence === canApproveStatus?.current_sequence
       );
     }
@@ -306,6 +319,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
   const workflowMessage = getWorkflowMessage();
   const sortedApprovals = getSortedApprovals();
+  const isSCMTeam = user.department === 'SCM';
 
   return (
     <div className="dashboard-container">
@@ -429,7 +443,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                   <th>Remarks</th>
                   <th>Date</th>
                   <th>Time Taken</th>
-                  {/* <th>Action</th> */}
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -453,8 +467,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                     approval.department === 'EXPORTS_MANAGER_INITIAL' ||
                     approval.department === 'EXPORTS_MANAGER_FINAL';
 
-                  const isExportsManager =
-                    user.department === 'Exports' && user.role?.toLowerCase() === 'manager';
+                  const isExportsManager = user.department === 'Exports';
 
                   const deptMatchesThisRow = isExportsManager
                     ? isExportsManagerApproval && approval.sequence === canApproveStatus?.current_sequence
@@ -504,15 +517,16 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                     <td>{approval.approved_at ? new Date(approval.approved_at).toLocaleDateString() : '—'}</td>
                     <td>{getDays()}</td>
                     <td>
-                      {/* {showApproveBtn && (
+                      {showApproveBtn && !isSCMTeam && (
                         <button
                           className="nav-button"
                           style={canApproveStatus?.is_scm_override ? { background: '#ff6f00', borderColor: '#e65100', color: '#fff' } : {}}
                           onClick={() => setApprovalModal(true)}
                         >
                           {canApproveStatus?.is_scm_override ? '⚡ Override' : '✔ Approve / Reject'}
+                        
                         </button>
-                      )} */}
+                      )}
                       {approval.status === 'PENDING' &&
                        !canApproveStatus?.can_approve && (
                         <span style={{ color: '#94a3b8', fontSize: '0.82em' }}>
@@ -589,7 +603,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                       style={canApproveStatus?.is_scm_override ? { background: '#ff6f00', borderColor: '#e65100', color: '#fff', width: '100%', marginTop: '10px' } : { width: '100%', marginTop: '10px' }}
                       onClick={() => setApprovalModal(true)}
                     >
-                      {canApproveStatus?.is_scm_override ? '⚡ Override' : 'Approve'}
+                      {canApproveStatus?.is_scm_override ? '⚡ Override' : '✔ Approve / Reject'}
                     </button>
                   </div>
                 )}
@@ -615,7 +629,14 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
           </div>
 
-          
+          {user.department === 'SCM' && (
+            <div style={{ marginBottom: '15px', textAlign: 'right' }}>
+              <button className="nav-button" onClick={openBulkTargetModal}>
+                Set Bulk Target Dates
+              </button>
+            </div>
+          )}
+
           <div className="table-container">
             <table className="data-table">
               <thead>
@@ -681,7 +702,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                           }}
                           onClick={() => {
                             setSelectedMilestone(milestone);
-                            setMilestoneModal(true);
+                            setShowMilestoneHistoryModal(true);
                           }}
                         >
                           History
@@ -783,8 +804,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                       {new Date(log.timestamp).toLocaleString()}
                     </span>
                   </div>
-                  
-                  <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '6px' }}>
+                       <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '6px' }}>
                     <strong>User:</strong> {log.user ? `${log.user.name} (${log.user.department})` : 'System'}
                   </div>
 
@@ -814,13 +834,13 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         <div className="modal-overlay" onClick={() => setApprovalModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>
-              {canApproveStatus?.is_scm_override
+              {isSCMTeam ? 'Submit Approval' : (canApproveStatus?.is_scm_override
                 ? `⚡ SCM Override — ${canApproveStatus?.pending_department || ''} Approval`
                 : canApproveStatus?.is_exports_override
                 ? `⭐ Exports Manager Override — ${canApproveStatus?.pending_department || ''} Approval`
-                : 'Submit Approval'}
+                : 'Submit Approval')}
             </h2>
-            {canApproveStatus?.is_scm_override && (
+            {!isSCMTeam && canApproveStatus?.is_scm_override && (
               <div style={{
                 background: '#fff3e0',
                 border: '1px solid #ff6f00',
@@ -862,7 +882,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 </select>
               </div>
 
-              {user.department === 'SCM' && (
+              {!isSCMTeam && user.department === 'SCM' && (
                 <div className="form-group">
                   <label htmlFor="targetDepartment">Override Department</label>
                   <select
@@ -895,12 +915,26 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 />
               </div>
 
+              {user.department === 'Regulatory' && canApproveStatus?.pending_department === 'REGULATORY' && (
+                <div className="form-group">
+                  <label>Regulatory Action</label>
+                  <select
+                    value={approvalData.regulatory_action}
+                    onChange={(e) => setApprovalData({ ...approvalData, regulatory_action: e.target.value })}
+                  >
+                    <option value="">Select Action</option>
+                    <option value="SEND_TO_ARTWORK">Send to Artwork for Processing</option>
+                    <option value="APPROVE_TO_FINANCE">Approve to Finance</option>
+                  </select>
+                </div>
+              )}
+
 
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="submit" className="submit-button"
-                  style={canApproveStatus?.is_scm_override ? { background: '#ff6f00' } : {}}>
-                  {canApproveStatus?.is_scm_override ? '⚡ Confirm Override' : 'Submit'}
+                  style={!isSCMTeam && canApproveStatus?.is_scm_override ? { background: '#ff6f00' } : {}}>
+                  {isSCMTeam ? 'Submit' : (canApproveStatus?.is_scm_override ? '⚡ Confirm Override' : 'Submit')}
                 </button>
                 <button type="button" className="nav-button" onClick={() => setApprovalModal(false)}>
                   Cancel
@@ -957,29 +991,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 />
               </div>
 
-              {milestoneHistory.length > 0 && (
-                <div style={{ marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '20px' }}>
-                  <h3>Milestone History</h3>
-                  <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '5px', padding: '10px' }}>
-                    {milestoneHistory.map((entry: any) => (
-                      <div key={entry.id} style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px dotted #eee' }}>
-                        <p style={{ margin: 0, fontWeight: 'bold' }}>
-                          {new Date(entry.changed_at).toLocaleString()} - {entry.changed_by?.name || 'Unknown User'}
-                        </p>
-                        <p style={{ margin: '5px 0 0 0', fontSize: '0.9em' }}>
-                          <strong>Type:</strong> {entry.change_type}
-                        </p>
-                        <p style={{ margin: '0 0 0 0', fontSize: '0.9em' }}>
-                          <strong>Old Value:</strong> {entry.old_value ? new Date(entry.old_value).toLocaleDateString() : 'N/A'}
-                        </p>
-                        <p style={{ margin: '0 0 0 0', fontSize: '0.9em' }}>
-                          <strong>New Value:</strong> {entry.new_value ? new Date(entry.new_value).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="submit" className="submit-button">Update</button>
@@ -988,6 +1000,47 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Milestone History Modal */}
+      {showMilestoneHistoryModal && selectedMilestone && (
+        <div className="modal-overlay" onClick={() => setShowMilestoneHistoryModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Milestone History: {selectedMilestone.name === 'PM Procurement Released' ? 'PO Released' : selectedMilestone.name}</h2>
+            {milestoneHistory.length === 0 ? (
+              <p>No history available for this milestone.</p>
+            ) : (
+              <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '5px', padding: '10px' }}>
+                {milestoneHistory.map((entry: any) => (
+                  <div key={entry.id} style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px dotted #eee' }}>
+                    <p style={{ margin: 0, fontWeight: 'bold' }}>
+                      {new Date(entry.changed_at).toLocaleString()} - {entry.changed_by?.name || 'Unknown User'}
+                    </p>
+                    <p style={{ margin: '5px 0 0 0', fontSize: '0.9em' }}>
+                      <strong>Type:</strong> {entry.change_type}
+                    </p>
+                    <p style={{ margin: '0 0 0 0', fontSize: '0.9em' }}>
+                      <strong>Old Value:</strong> {entry.old_value && !isNaN(new Date(entry.old_value) as any) && (entry.change_type === 'TARGET_DATE_UPDATED' || entry.change_type === 'ACTUAL_DATE_UPDATED') ? new Date(entry.old_value).toLocaleDateString() : entry.old_value || 'N/A'}
+                    </p>
+                    <p style={{ margin: '0 0 0 0', fontSize: '0.9em' }}>
+                      <strong>New Value:</strong> {entry.new_value && !isNaN(new Date(entry.new_value) as any) && (entry.change_type === 'TARGET_DATE_UPDATED' || entry.change_type === 'ACTUAL_DATE_UPDATED') ? new Date(entry.new_value).toLocaleDateString() : entry.new_value || 'N/A'}
+                    </p>
+                    {entry.remarks && (
+                      <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', fontStyle: 'italic', color: '#555' }}>
+                        <strong>Remarks:</strong> {entry.remarks}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button type="button" className="nav-button" onClick={() => setShowMilestoneHistoryModal(false)}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

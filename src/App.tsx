@@ -13,6 +13,8 @@ import Alerts from './components/Alerts';
 import AuditLogs from './components/AuditLogs';
 import RegulatoryCustomers from './components/RegulatoryCustomers';
 import CreateCustomer from './components/CreateCustomer';
+import SearchResults from './components/SearchResults';
+import CustomerDetail from './components/CustomerDetail';
 import './App.css';
 
 interface User {
@@ -95,6 +97,7 @@ function App() {
             path="/customers/create"
             element={user && user.department === 'Exports' ? <CreateCustomer /> : <Navigate to="/login" />}
           />
+          <Route path="/customers/:id" element={authGuard(<CustomerDetail user={user!} onLogout={handleLogout} />)} />
           <Route path="/registrations" element={artworkGuard(<Registrations user={user!} onLogout={handleLogout} />)} />
           <Route path="/alerts" element={authGuard(<Alerts user={user!} onLogout={handleLogout} />)} />
           <Route path="/audit-logs" element={artworkGuard(<AuditLogs user={user!} onLogout={handleLogout} />)} />
@@ -102,6 +105,7 @@ function App() {
             path="/regulatory-customers"
             element={user ? <RegulatoryCustomers user={user} onLogout={handleLogout} /> : <Navigate to="/login" />}
           />
+          <Route path="/search" element={authGuard(<SearchResults />)} />
         </Routes>
       </div>
     </Router>

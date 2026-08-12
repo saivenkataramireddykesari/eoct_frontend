@@ -80,7 +80,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           background: '#f5f5f5', 
           borderRadius: '6px', 
           fontSize: '12px',
-          overflowX: 'auto'
+          overflowX: 'auto',
+          display: 'none'
         }}>
         </div>
       </div>

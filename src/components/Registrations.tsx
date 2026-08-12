@@ -69,8 +69,8 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
     if (countryName) {
       try {
         const selectedCountryObj = countries.find(c => c.name === countryName);
-        const countryId = selectedCountryObj ? selectedCountryObj.id : countryName;
-        const response = await productAPI.getProductsByCountry(countryId);
+        // Pass countryName directly as the backend now expects the name
+        const response = await productAPI.getProductsByCountry(countryName);
         setFilteredSkus(response.data || []);
       } catch (error) {
         console.error(`Error fetching products for ${countryName}:`, error);
