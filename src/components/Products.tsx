@@ -34,7 +34,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string } | null>(null);
+  const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string; secondaryPmCode: string; leafPmCode: string } | null>(null);
   const [primaryPmCodeInput, setPrimaryPmCodeInput] = useState('');
   
   const [skuSuggestions, setSkuSuggestions] = useState<SkuSuggestion[]>([]);
@@ -270,7 +270,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const handlePmCodeUpdate = async () => {
     if (!pmModal) return;
     try {
-      await productAPI.updatePmCode(pmModal.sku, primaryPmCodeInput, '', '');
+      await productAPI.updatePmCode(pmModal.sku, primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
       setPmModal(null);
       setPrimaryPmCodeInput('');
       fetchProducts();
@@ -308,7 +308,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const handleArtworkSubmit = async () => {
     if (!artworkSubmitModal || !primaryPmCodeInput.trim()) return;
     try {
-      await productAPI.submitPmCode(
+      await productAPI.submitArtworkPmCode(
         artworkSubmitModal.requestId,
         primaryPmCodeInput.trim(),
         secondaryPmCodeInput.trim(),
@@ -473,7 +473,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                           className="submit-button"
                           style={{ background: '#ff9800', borderColor: '#ff9800' }}
                           onClick={() => {
-                            setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
+                            setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku });
                             setPrimaryPmCodeInput(latestRequest.current_primary_pm_code || product.primary_pm_code || '');
                             setSecondaryPmCodeInput(latestRequest.current_secondary_pm_code || product.secondary_pm_code || '');
                             setLeafPmCodeInput(latestRequest.current_leaf_pm_code || product.leaf_pm_code || '');
@@ -487,8 +487,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                           className="submit-button"
                           style={{ background: '#ff9800', borderColor: '#ff9800' }}
                           onClick={() => {
-                            setPmModal({ sku: product.sku_code, primaryPmCode: product.primary_pm_code || '' });
+                            setPmModal({ sku: String(product.sku_code), primaryPmCode: String(product.primary_pm_code || ''), secondaryPmCode: String(product.secondary_pm_code || ''), leafPmCode: String(product.leaf_pm_code || '' )});
                             setPrimaryPmCodeInput(product.primary_pm_code || latestRequest?.current_primary_pm_code || '');
+                            setSecondaryPmCodeInput(product.secondary_pm_code || latestRequest?.current_secondary_pm_code || '');
+                            setLeafPmCodeInput(product.leaf_pm_code || latestRequest?.current_leaf_pm_code || '');
                           }}
                         >
                           Update PM Code
@@ -643,7 +645,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       className="submit-button"
                       style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
                       onClick={() => {
-                        setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
+                        setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku });
                         setPrimaryPmCodeInput(latestRequest.current_primary_pm_code || product.primary_pm_code || '');
                         setSecondaryPmCodeInput(latestRequest.current_secondary_pm_code || product.secondary_pm_code || '');
                         setLeafPmCodeInput(latestRequest.current_leaf_pm_code || product.leaf_pm_code || '');
@@ -657,7 +659,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       className="submit-button"
                       style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
                       onClick={() => {
-                        setPmModal({ sku: product.sku_code, primaryPmCode: product.primary_pm_code || '' });
+                        setPmModal({ sku: String(product.sku_code), primaryPmCode: String(product.primary_pm_code || ''), secondaryPmCode: String(product.secondary_pm_code || ''), leafPmCode: String(product.leaf_pm_code || '' )});
                         setPrimaryPmCodeInput(product.primary_pm_code || latestRequest?.current_primary_pm_code || '');
                       }}
                     >
@@ -898,6 +900,27 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 onChange={(e) => setPrimaryPmCodeInput(e.target.value)}
                 placeholder="Enter PM Code"
                 required
+                style={{ marginBottom: '15px' }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Secondary PM Code (Optional)</label>
+              <input
+                type="text"
+                value={secondaryPmCodeInput}
+                onChange={(e) => setSecondaryPmCodeInput(e.target.value)}
+                placeholder="Enter Secondary PM Code"
+                style={{ marginBottom: '15px' }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Leaflet / Leaf PM Code (Optional)</label>
+              <input
+                type="text"
+                value={leafPmCodeInput}
+                onChange={(e) => setLeafPmCodeInput(e.target.value)}
+                placeholder="Enter Leaf PM Code"
+                style={{ marginBottom: '15px' }}
               />
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>

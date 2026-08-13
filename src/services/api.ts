@@ -1,9 +1,9 @@
 import axios from 'axios';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse } from "../shared-types";
 
-const API_URL = 'https://eoct-backend.onrender.com/api';
+const API_URL = 'http://localhost:8000/api';
 
-//
+//https://eoct-backend.onrender.com
 
 const api = axios.create({
   baseURL: API_URL,
@@ -85,8 +85,8 @@ export const productAPI = {
   updatePmCode: (sku: string, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string) => api.patch(`/products/${sku}/pm-code`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode }),
   getPmRequests: () => api.get('/products/pm-requests'),
   requestPmCode: (sku: string) => api.post(`/products/${sku}/pm-requests`),
-  submitPmCode: (requestId: number, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string, remarks?: string) => api.post(`/products/pm-requests/${requestId}/submit`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, remarks }),
   decidePmCode: (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string, primaryPmCode?: string, secondaryPmCode?: string, leafPmCode?: string, artworkStatus?: string) => api.post(`/products/pm-requests/${requestId}/decide`, { decision, remarks, primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, artwork_status: artworkStatus }),
+  submitArtworkPmCode: (requestId: number, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string, remarks?: string) => api.post(`/products/pm-requests/${requestId}/submit-artwork`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, remarks }),
   getCategories: () => api.get('/categories'),
   getCountries: () => api.get<Country[]>('/countries'),
   searchProducts: (query: string) => api.get<ProductSearchResponse>(`/products/search`, { params: { query } }),
