@@ -94,20 +94,26 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('handleSubmit invoked'); // Added log
     e.preventDefault();
     setFormError('');
     setSubmitting(true);
+    console.log('Submitting form data:', formData); // Log form data before API call
+    console.log('Current submitting state:', submitting);
+    console.log('Current isRegistrationAutoFilled state:', isRegistrationAutoFilled);
     try {
-      await registrationAPI.createRegistration({
+      const response = await registrationAPI.createRegistration({
         ...formData,
         registration_issue_date: formData.registration_issue_date || null,
         registration_expiry_date: formData.registration_expiry_date || null,
       });
+      console.log('Registration created successfully:', response.data); // Log success response
       setShowModal(false);
       resetForm();
       setIsRegistrationAutoFilled(false);
       fetchData();
     } catch (error: any) {
+      console.error('Error creating registration:', error); // Log error response
       setFormError(formatErrorMessage(error, 'Error creating registration'));
     } finally {
       setSubmitting(false);
@@ -317,8 +323,9 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
       {showModal && (
         <div className="modal-overlay" onClick={() => { setShowModal(false); resetForm(); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Add New Registration</h2>
-            <form onSubmit={handleSubmit}>
+            <>
+              <h2>Add New Registration</h2>
+              <form onSubmit={handleSubmit}>
 
               {/* ── Inline Error Banner ── */}
               {formError && (
@@ -381,6 +388,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                             remarks: registration.remarks || '',
                           }));
                           setIsRegistrationAutoFilled(true);
+                          setFormError('This product is already registered in this country. You can update the existing registration by modifying the fields.');
                         } else {
                           // No registration found, clear registration-specific fields
                           setFormData(prev => ({
@@ -486,7 +494,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                 <button type="submit" className="submit-button" disabled={submitting || isRegistrationAutoFilled}>
-                  {submitting ? 'Saving…' : 'Add Registration'}
+                  {submitting ? 'Saving…' : 'Submit'}
                 </button>
                 <button
                   type="button"
@@ -497,6 +505,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                 </button>
               </div>
             </form>
+            </>
           </div>
         </div>
       )}
@@ -505,3 +514,4 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
 };
 
 export default Registrations;
+

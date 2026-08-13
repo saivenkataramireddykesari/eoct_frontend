@@ -12,6 +12,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [productTypeFilter, setProductTypeFilter] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(15);
   const [hasMore, setHasMore] = useState(true);
@@ -20,13 +21,13 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
   useEffect(() => {
     setPage(1);
     fetchOrders(1);
-  }, [statusFilter]);
+  }, [statusFilter, productTypeFilter]);
 
   const fetchOrders = async (p: number = page) => {
     try {
       setLoading(true);
       const skip = (p - 1) * pageSize;
-      const response = await orderAPI.getOrders(statusFilter || undefined, skip, pageSize);
+      const response = await orderAPI.getOrders(statusFilter || undefined, productTypeFilter || undefined, skip, pageSize);
       setOrders(response.data);
       setHasMore(response.data.length === pageSize);
     } catch (error) {
@@ -118,6 +119,20 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               </option>
             ))}
           </select>
+
+          {user.department === 'SCM' && (
+            <div style={{ marginLeft: '20px' }}>
+              <label>Filter by Product Type:</label>
+              <select
+                value={productTypeFilter}
+                onChange={(e) => setProductTypeFilter(e.target.value)}
+              >
+                <option value="">All Product Types</option>
+                <option value="PP">PP</option>
+                {/* Add other product types as needed */}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Desktop Table View */}

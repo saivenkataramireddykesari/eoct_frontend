@@ -745,13 +745,13 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               </div>
 
               <div className="form-group">
-                <label>Category *</label>
+                <label>Manufacturing unit *</label>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   required
                 >
-                  <option value="">— Select Category —</option>
+                  <option value="">— Select —</option>
                   {categories.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}

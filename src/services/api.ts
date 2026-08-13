@@ -56,7 +56,7 @@ export const dashboardAPI = {
 
 // Order APIs
 export const orderAPI = {
-  getOrders: (status?: string, skip: number = 0, limit: number = 20) => api.get('/orders', { params: { status, skip, limit } }),
+  getOrders: (status?: string, productType?: string, skip: number = 0, limit: number = 20) => api.get('/orders', { params: { status, product_type: productType, skip, limit } }),
   getOrder: (id: number) => api.get(`/orders/${id}`),
   createOrder: (data: any) => api.post('/orders', data),
   updateOrder: (id: number, data: any) => api.put(`/orders/${id}`, data),

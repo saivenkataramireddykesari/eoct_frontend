@@ -18,6 +18,7 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const query = params.get('query');
+    console.log("Debug: Search query from URL params:", query);
 
     if (query) {
       setSearchQuery(query);
@@ -26,9 +27,11 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
       searchAPI.getSuggestions(query)
         .then(response => {
           setResults(response.data.suggestions);
+          console.log("Debug: API success - suggestions:", response.data.suggestions);
         })
         .catch(err => {
           console.error("Error fetching search results:", err);
+          console.log("Debug: API error - results set to empty.");
           setError("Failed to fetch search results.");
           setResults([]);
         })
@@ -65,6 +68,7 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
       <h2>Search Results for "{searchQuery}"</h2>
       {loading && <p>Loading results...</p>}
       {error && <p className="error-message">{error}</p>}
+      console.log("Debug: Final state - loading:", loading, "error:", !!error, "results.length:", results.length, "searchQuery:", searchQuery);
       {!loading && !error && results.length === 0 && searchQuery && (
         <p>No results found for "{searchQuery}".</p>
       )}

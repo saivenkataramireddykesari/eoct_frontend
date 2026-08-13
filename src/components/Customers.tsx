@@ -177,12 +177,12 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
       setErrorMessage('Please enter Shipping Terms.');
       return;
     }
-    if (!formData.agreement_status) {
-      setErrorMessage('Please select an Agreement Status.');
-      return;
-    }
-    if (!formData.agreement_validity) {
-      setErrorMessage('Please select an Agreement Validity date.');
+if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
+  setErrorMessage('Please select an Agreement Validity date when Agreement Status is Active.');
+  return;
+}
+    if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
+      setErrorMessage('Please select an Agreement Validity date for active agreements.');
       return;
     }
 
@@ -474,12 +474,20 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
 
               {/* Field 5: Agreement Validity */}
               <div className="form-group">
-                <label>Agreement Validity *</label>
+                <label>
+                  Agreement Validity {formData.agreement_status === 'Active' ? '*' : ''}
+                </label>
+
                 <input
                   type="date"
                   value={formData.agreement_validity}
-                  onChange={(e) => setFormData({ ...formData, agreement_validity: e.target.value })}
-                  required
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      agreement_validity: e.target.value
+                    })
+                  }
+                  required={formData.agreement_status === 'Active'}
                 />
               </div>
 
