@@ -21,7 +21,7 @@ const CreateCustomer: React.FC = () => {
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const res = await customerAPI.getCustomers(undefined, undefined, undefined, undefined, 0, 1000);
+        const res = await customerAPI.getCustomers(undefined, undefined, undefined, 0, 1000);
         setAllCustomers(res.data);
         // Initialize filtered customers if a country is already selected
         if (country) {

@@ -47,7 +47,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div className="panel">

@@ -33,32 +33,47 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
   }, [fetchUnreadAlerts]);
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get('search') || params.get('query') || '';
+    setSearchQuery(q);
+  }, [location.search]);
+
+  useEffect(() => {
     const handler = setTimeout(async () => {
-      if (searchQuery.length > 2) {
+      if (searchQuery.trim().length > 0) {
         try {
           const response = await searchAPI.getSuggestions(searchQuery);
-          setSuggestions(response.data.suggestions);
+          setSuggestions(response.data.suggestions || []);
           setShowSuggestions(true);
         } catch (error) {
           console.error('Error fetching search suggestions:', error);
           setSuggestions([]);
-          setShowSuggestions(false);
+          setShowSuggestions(true);
         }
       } else {
         setSuggestions([]);
         setShowSuggestions(false);
       }
-    }, 500); // 500ms debounce time
+    }, 150); // 150ms fast debounce for each word/character typed
 
     return () => {
       clearTimeout(handler);
     };
   }, [searchQuery]);
 
-  console.log('User Department:', user.department, 'User Role:', user.role);
-
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
+    const val = e.target.value;
+    setSearchQuery(val);
+
+    const params = new URLSearchParams(location.search);
+    if (val) {
+      params.set('search', val);
+    } else {
+      params.delete('search');
+    }
+    const searchString = params.toString();
+    const newPath = searchString ? `${location.pathname}?${searchString}` : location.pathname;
+    navigate(newPath, { replace: true });
   };
 
   const handleSuggestionClick = (suggestion: SearchSuggestion) => {
@@ -68,31 +83,41 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     // Navigate based on suggestion type
     switch (suggestion.type) {
       case 'product':
-        navigate(`/products/${suggestion.id}`); // Assuming product detail page
+        if (suggestion.id && !isNaN(Number(suggestion.id))) {
+          navigate(`/products/${suggestion.id}`);
+        } else {
+          navigate(`/products?search=${encodeURIComponent(suggestion.name)}`);
+        }
         break;
       case 'customer':
-        navigate(`/customers/${suggestion.id}`); // Assuming customer detail page
+        if (user.department === 'Artwork') {
+          navigate(`/products?search=${encodeURIComponent(suggestion.name)}`);
+        } else {
+          navigate(`/customers/${suggestion.id}`);
+        }
         break;
       case 'order':
-        navigate(`/orders/${suggestion.id}`); // Assuming order detail page
+        if (user.department === 'Artwork') {
+          navigate(`/products?search=${encodeURIComponent(suggestion.name)}`);
+        } else {
+          navigate(`/orders/${suggestion.id}`);
+        }
         break;
       default:
-        // Handle generic search or navigate to a search results page
-        navigate(`/search?query=${suggestion.name}`);
+        navigate(`/search?query=${encodeURIComponent(suggestion.name)}`);
         break;
     }
   };
 
   const navItems = user.department === 'Artwork'
     ? [
-        { path: '/', label: 'Dashboard' },
-        { path: '/orders', label: 'Orders' },
         { path: '/products', label: 'Products' },
         { path: '/alerts', label: 'Alerts' },
       ]
     : user.department === 'Regulatory'
     ? [
-        { path: '/', label: 'Dashboard' },
+
+        { path: '/', label: 'Orders' },
         { path: '/registrations', label: 'Registrations' },
         { path: '/products', label: 'Products' },
         { path: '/alerts', label: 'Alerts' },
@@ -100,23 +125,23 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
       ]
     : user.department === 'Exports' && user.role === 'manager'
     ? [
-        { path: '/', label: 'Dashboard' },
-        { path: '/orders', label: 'Orders' },
+
+        { path: '/', label: 'Orders' },
         { path: '/customers', label: 'Customers' },
         { path: '/alerts', label: 'Alerts' },
         { path: '/audit-logs', label: 'Audit Logs' },
       ]
     : user.department === 'Exports'
     ? [
-        { path: '/', label: 'Dashboard' },
-        { path: '/orders', label: 'Orders' },
+
+        { path: '/', label: 'Orders' },
         { path: '/customers', label: 'Customers' },
         { path: '/alerts', label: 'Alerts' },
         { path: '/audit-logs', label: 'Audit Logs' },
       ]
     : [
-        { path: '/', label: 'Dashboard' },
-        { path: '/orders', label: 'Orders' },
+
+        { path: '/', label: 'Orders' },
         { path: '/alerts', label: 'Alerts' },
         { path: '/audit-logs', label: 'Audit Logs' },
       ];
@@ -145,16 +170,38 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
               className="search-input"
               value={searchQuery}
               onChange={handleSearchInputChange}
-              onFocus={() => { if (searchQuery.length > 2) { setSuggestions([]); setShowSuggestions(true); } }}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 100)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim().length > 0) {
+                  setShowSuggestions(false);
+                  navigate(`/search?query=${searchQuery}`);
+                }
+              }}
+              onFocus={() => { if (searchQuery.length > 2) { setShowSuggestions(true); } }}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
             />
-            {showSuggestions && suggestions.length > 0 && (
+            {showSuggestions && searchQuery.length > 2 && (
               <ul className="suggestions-list">
-                {suggestions.map((suggestion, index) => (
-                  <li key={index} onMouseDown={() => handleSuggestionClick(suggestion)}>
-                    {suggestion.name} ({suggestion.type})
+                {suggestions.length > 0 ? (
+                  suggestions.map((suggestion, index) => (
+                    <li key={index} onMouseDown={() => handleSuggestionClick(suggestion)}>
+                      {suggestion.name} ({suggestion.type})
+                    </li>
+                  ))
+                ) : (
+                  <li className="no-suggestions" style={{ padding: '8px 12px', color: '#888', cursor: 'default' }}>
+                    No results found
                   </li>
-                ))}
+                )}
+                <li 
+                  className="suggestion-filter" 
+                  style={{ borderTop: '1px solid #eee', padding: '8px 12px', color: '#0056b3', cursor: 'pointer', fontStyle: 'italic', background: '#f8f9fa' }}
+                  onMouseDown={() => {
+                    setShowSuggestions(false);
+                    navigate(`/search?query=${searchQuery}`);
+                  }}
+                >
+                  See all results for "{searchQuery}"
+                </li>
               </ul>
             )}
           </div>

@@ -31,7 +31,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     if (!user || user.department !== 'Exports' || !['user', 'Team', 'Manager'].includes(user.role)) {
-      navigate('/dashboard');
+      navigate('/orders');
       alert('You are not authorized to create orders.');
     }
   }, [user, navigate]);
@@ -44,6 +44,9 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const [loading, setLoading]                     = useState(false);
   const [error, setError]                         = useState('');
   const [success, setSuccess]                     = useState('');
+
+  // State for available SKUs to pass to ProductItem
+  const [availableSkus, setAvailableSkus] = useState<{ sku_code: string; product_name: string }[]>([]);
 
 
   /* ── Order state ── */
@@ -64,9 +67,6 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const [importLicValidity, setImportLicValidity] = useState('');
   const [remarks, setRemarks]       = useState('');
 
-  /* ── Product filtering states ── */
-  const [selectedProductSku, setSelectedProductSku] = useState<string>('');
-  const [selectedProductName, setSelectedProductName] = useState<string>('');
 
 
   /* ── Products State (multiple) ── */
@@ -79,7 +79,9 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     batchSize: string;
     moq: string;
     artworkStatus: string;
-    pmCode: string;
+    primaryPmCode: string;
+    secondaryPmCode: string;
+    leafPmCode: string;
     salesQty: string;
     freeQty: string;
     price: string;
@@ -96,7 +98,9 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     batchSize: '',
     moq: '',
     artworkStatus: defaultArtworkStatus,
-    pmCode: '',
+    primaryPmCode: '',
+    secondaryPmCode: '',
+    leafPmCode: '',
     salesQty: '',
     freeQty: '',
     price: '',
@@ -121,22 +125,11 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const handleUpdateProduct = (id: string, field: string, value: any) => {
     // Functional form ensures we always operate on the latest state
     setProducts(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
-
-    // If the updated product is the first one, update the selected SKU/Product Name states
-    // This assumes the first product in the array is the one whose selection should influence customer filtering
-    if (products[0]?.id === id) {
-      if (field === 'skuCode') setSelectedProductSku(value);
-      if (field === 'productName') setSelectedProductName(value);
-    }
   };
 
   // Bulk-update multiple fields at once in a single setState call
   const handleUpdateManyProducts = (id: string, fields: Record<string, any>) => {
     setProducts(prev => prev.map(p => p.id === id ? { ...p, ...fields } : p));
-    if (products[0]?.id === id) {
-      if (fields.skuCode) setSelectedProductSku(fields.skuCode);
-      if (fields.productName) setSelectedProductName(fields.productName);
-    }
   };
 
   /* Function to fetch filtered customers */
@@ -150,13 +143,18 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     }
   };
 
+  // Store raw products list for filtering
+  const [allProducts, setAllProducts] = useState<any[]>([]);
+
   /* Load all customers and countries on initial render */
   useEffect(() => {
     const loadInitialData = async () => {
+      let custRes, countryRes, productsRes; // Declare variables outside try block
       try {
-        const [custRes, countryRes] = await Promise.all([
-          customerAPI.getCustomers(undefined, undefined, undefined, undefined, 0, 1000),
-          productAPI.getCountries()
+        [custRes, countryRes, productsRes] = await Promise.all([
+          customerAPI.getCustomers(undefined, undefined, undefined, 0, 1000),
+          productAPI.getCountries(),
+          productAPI.getProducts(0, 1000) // Fetch all products to get SKUs
         ]);
         const customers = custRes.data;
         setAllCustomers(customers);
@@ -169,13 +167,44 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
           ).filter(Boolean).sort() as string[];
           setCountries(uniqueCountries);
         }
+
+        // Set products list
+        if (productsRes.data && Array.isArray(productsRes.data)) {
+          setAllProducts(productsRes.data);
+          setAvailableSkus(productsRes.data.map((p: any) => ({ sku_code: p.sku_code, product_name: p.product_name })));
+        }
       } catch (err: any) { // Corrected catch syntax
         console.error("Error fetching initial data:", err);
-        setError("Failed to load initial data (customers/countries).");
+        setError("Failed to load initial data (customers/countries/products)."); // More specific error message
       }
     };
     loadInitialData();
   }, []);
+
+  /* Filter SKUs whenever Country or Customer changes */
+  useEffect(() => {
+    if (!allProducts.length) return;
+
+    let filtered = allProducts;
+
+    if (country) {
+      filtered = filtered.filter((p: any) => p.country?.name === country);
+    }
+
+    if (customerName) {
+      filtered = filtered.filter((p: any) => p.customer === customerName);
+    }
+
+    setAvailableSkus(filtered.map((p: any) => ({ sku_code: p.sku_code, product_name: p.product_name })));
+
+    // Reset selected SKU code in products if current selected SKU is no longer in filtered SKUs
+    const validSkuCodes = new Set(filtered.map((p: any) => p.sku_code));
+    setProducts(prevProducts =>
+      prevProducts.map(prod =>
+        prod.skuCode && !validSkuCodes.has(prod.skuCode) ? { ...prod, skuCode: '' } : prod
+      )
+    );
+  }, [country, customerName, allProducts]);
 
   /* Effect to re-fetch filtered customers when relevant filters change */
   useEffect(() => {
@@ -357,6 +386,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
           import_license_required: importLicRequired === 'Yes',
           import_license_validity: importLicValidity || null,
           remarks: remarks || null,
+          order_type: product.category === 'PP' ? 'PP' : 'PNS',
         });
         createdOrderNumbers.push(res.data.order_number);
       }
@@ -394,7 +424,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   const inpTotal: React.CSSProperties = { ...inp, background: '#fff3e0', color: '#e65100', fontWeight: 700, fontSize: '1rem' };
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div style={{ maxWidth: '860px', margin: '0 auto', padding: '24px 16px' }}>
@@ -525,6 +555,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
                 currencies={CURRENCIES}
                 selectedCountry={country}
                 selectedCustomerId={customerId}
+                availableSkus={availableSkus} // Pass available SKUs here
               />
             ))}
 

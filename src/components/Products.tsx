@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { productAPI, customerAPI } from '../services/api';
 import Header from './Header';
 import { Country, Customer } from '../shared-types';
@@ -12,8 +13,6 @@ interface SkuSuggestion {
   sku_code: string;
   product_name: string;
 }
-
-const DEFAULT_CATEGORIES = ["PP", "PNS"];
 
 interface ProductFormData {
   sku_code: string;
@@ -31,11 +30,23 @@ interface ProductFormData {
 }
 
 const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string; secondaryPmCode: string; leafPmCode: string } | null>(null);
   const [primaryPmCodeInput, setPrimaryPmCodeInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [viewProductModal, setViewProductModal] = useState<any | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get('search') || params.get('query');
+    if (q) {
+      setSearchTerm(q);
+    }
+  }, [location.search]);
   
   const [skuSuggestions, setSkuSuggestions] = useState<SkuSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -43,13 +54,18 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   // Dropdown options from database & defaults
   const [countries, setCountries] = useState<Country[]>([]);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
 
   // PM Code Request workflow states
   const [historyModal, setHistoryModal] = useState<any | null>(null);
-  const [rejectModal, setRejectModal] = useState<{ requestId: number } | null>(null);
+  const [rejectModal, setRejectModal] = useState<{
+    requestId: number;
+    sku?: string;
+    primaryPmCode?: string;
+    secondaryPmCode?: string;
+    leafPmCode?: string;
+  } | null>(null);
   const [rejectRemarks, setRejectRemarks] = useState('');
   const [artworkSubmitModal, setArtworkSubmitModal] = useState<{ requestId: number; sku: string } | null>(null);
   const [secondaryPmCodeInput, setSecondaryPmCodeInput] = useState('');
@@ -70,7 +86,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [formData, setFormData] = useState<ProductFormData>({
     sku_code: '',
     product_name: '',
-    category: '',
+    category: 'PP',
     country_id: null,
     customer: '',
     pack_size: '',
@@ -104,16 +120,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
 
     try {
-      const catRes = await productAPI.getCategories();
-      if (catRes.data && Array.isArray(catRes.data.categories)) {
-        setCategories(catRes.data.categories);
-      }
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-
-    try {
-      const custRes = await customerAPI.getCustomers(undefined, undefined, undefined, undefined, 0, 1000);
+      const custRes = await customerAPI.getCustomers(undefined, undefined, undefined, 0, 1000);
       if (custRes.data) {
         setCustomers(custRes.data);
       }
@@ -148,7 +155,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     setFormData({
       sku_code: '',
       product_name: '',
-      category: '',
+      category: 'PP',
       country_id: null,
       customer: '',
       pack_size: '',
@@ -178,9 +185,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     const checkDuplicate = async () => {
-      if (formData.category && formData.country_id && formData.customer && formData.pack_size) {
+      if (formData.country_id && formData.customer && formData.pack_size) {
         try {
-          const res = await productAPI.checkDuplicate(formData.category, formData.country_id, formData.customer, formData.pack_size);
+          const res = await productAPI.checkDuplicate(formData.country_id, formData.customer, formData.pack_size);
           if (res.data.is_duplicate) {
             alert(`Duplicate product found with SKU: ${res.data.sku}. You cannot create duplicates.`);
             setFormData(prev => ({ ...prev, pack_size: '' })); // Block duplicate by clearing pack size
@@ -193,7 +200,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     if (showModal) {
       checkDuplicate();
     }
-  }, [formData.category, formData.country_id, formData.customer, formData.pack_size, showModal]);
+  }, [formData.country_id, formData.customer, formData.pack_size, showModal]);
 
   const handleProductSelect = async (selected: SkuSuggestion) => {
     setFormData({ ...formData, product_name: selected.product_name });
@@ -206,14 +213,14 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
         setFormData({
           ...formData,
           ...response.data,
+          category: response.data.category || 'PP',
           standard_batch_size: response.data.standard_batch_size || '',
           moq: response.data.moq || '',
           sku_code: response.data.sku_code,
           country_id: response.data.country?.id || null,
         });
-        // We do NOT set isEditMode = true. It will always be added as a new product.
-        setIsEditMode(false);
-        setEditProductId(null);
+        setIsEditMode(true);
+        setEditProductId(response.data.id || null);
       }
     } catch (error) {
       console.error('Error fetching product details:', error);
@@ -241,7 +248,6 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       setShowSuggestions(false);
     }
   };
-
 
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -300,7 +306,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     try {
       await productAPI.decidePmCode(requestId, decision, remarks, primaryPmCode, secondaryPmCode, leafPmCode, artworkStatus);
       fetchProducts();
-    } catch (error: any) {
+    }  catch (error: any) {
       alert(error.response?.data?.detail || 'Error submitting decision');
     }
   };
@@ -334,12 +340,26 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
   };
 
+  const filteredProducts = products.filter((product) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (product.sku_code && product.sku_code.toLowerCase().includes(term)) ||
+      (product.product_name && product.product_name.toLowerCase().includes(term)) ||
+      (product.customer && product.customer.toLowerCase().includes(term)) ||
+      (product.country?.name && product.country.name.toLowerCase().includes(term)) ||
+      (product.pack_size && product.pack_size.toLowerCase().includes(term)) ||
+      (product.primary_pm_code && product.primary_pm_code.toLowerCase().includes(term)) ||
+      (product.artwork_status && product.artwork_status.toLowerCase().includes(term))
+    );
+  });
+
   if (loading) {
     return <div className="loading">Loading products...</div>;
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div className="panel">
@@ -360,7 +380,6 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               <tr>
                 <th>SKU Code</th>
                 <th>Product Name</th>
-                <th>Category</th>
                 <th>Country</th>
                 <th>Customer</th>
                 <th>Pack Size</th>
@@ -374,7 +393,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => {
+              {filteredProducts.map((product) => {
                 const requests = product.pm_code_requests || [];
                 const latestRequest = requests[requests.length - 1];
                 const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
@@ -402,10 +421,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 };
 
                 return (
-                  <tr key={product.id}>
-                    <td>{product.sku_code}</td>
-                    <td>{product.product_name}</td>
-                    <td>{product.category}</td>
+                  <tr key={product.id} onClick={() => navigate(`/products/${product.id}`)} style={{ cursor: 'pointer' }}>
+                    <td><strong style={{ color: '#0284c7' }}>{product.sku_code}</strong></td>
+                    <td><strong>{product.product_name}</strong></td>
                     <td>{product.country?.name || "-"}</td>
                     <td>{product.customer}</td>
                     <td>{product.pack_size}</td>
@@ -427,7 +445,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     <td>
                       <button
                         className="nav-button"
-                        onClick={() => setHistoryModal(product)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHistoryModal(product);
+                        }}
                       >
                         Show History
                       </button>
@@ -499,7 +520,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       {!showGetPmCode && 
                        !(isRegulatory && latestRequest && (latestRequest.status === 'PENDING_ARTWORK' || latestRequest.status === 'AWAITING_REGULATORY_APPROVAL')) &&
                        user.department !== 'Artwork' && (
-                        <span style={{ color: '#999' }}>—</span>
+                        <span style={{ color: '#999' }}>&lt; 1 day</span>
                       )}
                     </td>
                   </tr>
@@ -511,7 +532,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {products.map((product) => {
+          {filteredProducts.map((product) => {
             const requests = product.pm_code_requests || [];
             const latestRequest = requests[requests.length - 1];
             const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
@@ -539,7 +560,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
             };
 
             return (
-              <div key={product.id} className="mobile-card">
+              <div key={product.id} className="mobile-card" onClick={() => navigate(`/products/${product.id}`)} style={{ cursor: 'pointer' }}>
                 <div className="mobile-card-row">
                   <span className="mobile-card-label">SKU Code</span>
                   <span className="mobile-card-value">{product.sku_code}</span>
@@ -547,10 +568,6 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 <div className="mobile-card-row">
                   <span className="mobile-card-label">Product Name</span>
                   <span className="mobile-card-value">{product.product_name}</span>
-                </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Category</span>
-                  <span className="mobile-card-value">{product.category}</span>
                 </div>
                 <div className="mobile-card-row">
                   <span className="mobile-card-label">Country</span>
@@ -588,10 +605,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   <span className="mobile-card-label">PM Request Status</span>
                   <span className="mobile-card-value">
                     {latestRequest ? (
-                      <span className={`status-badge ${getPmRequestStatusClass()}`}>
-                        {getPmRequestStatusText()}
-                      </span>
-                    ) : '—'}
+                        <span className={`status-badge ${getPmRequestStatusClass()}`}>
+                          {getPmRequestStatusText()}
+                        </span>
+                      ) : '—'}
                   </span>
                 </div>
                 <div className="mobile-card-row" style={{ marginTop: '8px' }}>
@@ -614,7 +631,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     </button>
                   )}
                   {isRegulatory && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
-                    <span style={{ color: '#666', fontSize: '0.9em', textAlign: 'center', width: '100%', display: 'block' }}>Awaiting Artwork</span>
+                    <span style={{ color: '#666', fontSize: '0.9em', textAlign: 'center', width: '100%' }}>Awaiting Artwork</span>
                   )}
                   {isRegulatory && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
                     <div style={{ display: 'flex', gap: '5px', width: '100%' }}>
@@ -634,7 +651,13 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       <button
                         className="nav-button"
                         style={{ background: '#f44336', borderColor: '#f44336', color: '#fff', flex: 1, padding: '6px', fontSize: '0.85em' }}
-                        onClick={() => setRejectModal({ requestId: latestRequest.id })}
+                        onClick={() => setRejectModal({
+                          requestId: latestRequest.id,
+                          sku: product.sku_code,
+                          primaryPmCode: latestRequest.current_primary_pm_code || latestRequest.current_pm_code || '—',
+                          secondaryPmCode: latestRequest.current_secondary_pm_code || '—',
+                          leafPmCode: latestRequest.current_leaf_pm_code || '—'
+                        })}
                       >
                         Reject
                       </button>
@@ -661,6 +684,8 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       onClick={() => {
                         setPmModal({ sku: String(product.sku_code), primaryPmCode: String(product.primary_pm_code || ''), secondaryPmCode: String(product.secondary_pm_code || ''), leafPmCode: String(product.leaf_pm_code || '' )});
                         setPrimaryPmCodeInput(product.primary_pm_code || latestRequest?.current_primary_pm_code || '');
+                        setSecondaryPmCodeInput(product.secondary_pm_code || latestRequest?.current_secondary_pm_code || '');
+                        setLeafPmCodeInput(product.leaf_pm_code || latestRequest?.current_leaf_pm_code || '');
                       }}
                     >
                       Update PM Code
@@ -707,7 +732,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       {showModal && isRegulatory && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Add New Product</h2>
+            <h2>{isEditMode ? 'Edit Product' : 'Add New Product'}</h2>
             <form onSubmit={handleSubmit}>
               <div className="form-group" style={{ position: 'relative' }}>
                 <label>Product Name *</label>
@@ -736,27 +761,27 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               </div>
 
               <div className="form-group">
-                <label>SKU Code *</label>
+                <label>SKU Code * {isEditMode && <span style={{ fontSize: '0.8em', color: '#64748b' }}>(Locked in Edit Mode)</span>}</label>
                 <input
                   type="text"
                   value={formData.sku_code}
                   onChange={(e) => setFormData({ ...formData, sku_code: e.target.value })}
                   required
+                  disabled={isEditMode}
+                  style={isEditMode ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.8 } : {}}
                   placeholder="e.g. SKU-101"
                 />
               </div>
 
               <div className="form-group">
-                <label>Manufacturing unit *</label>
+                <label>Manufacturing Unit *</label>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   required
                 >
-                  <option value="">— Select —</option>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
+                  <option value="PP">PP (Paonta Sahib)</option>
+                  <option value="PNS">PNS (Pithampur)</option>
                 </select>
               </div>
 
@@ -877,7 +902,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button type="submit" className="submit-button">Add Product</button>
+                <button type="submit" className="submit-button">
+                  {isEditMode ? 'Save Product' : 'Add Product'}
+                </button>
                 <button type="button" className="nav-button" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>
@@ -1045,6 +1072,26 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
         <div className="modal-overlay" onClick={() => { setRejectModal(null); setRejectRemarks(''); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Reject PM Code Request</h2>
+            {rejectModal.sku && (
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '14px',
+                fontSize: '0.9em',
+                color: '#334155'
+              }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '6px', color: '#0f172a' }}>
+                  SKU: <span style={{ color: '#0284c7' }}>{rejectModal.sku}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '0.85em' }}>
+                  <div><strong>Primary PM Code:</strong> {rejectModal.primaryPmCode || '—'}</div>
+                  <div><strong>Secondary PM Code:</strong> {rejectModal.secondaryPmCode || '—'}</div>
+                  <div><strong>Leaflet PM Code:</strong> {rejectModal.leafPmCode || '—'}</div>
+                </div>
+              </div>
+            )}
             <div style={{
               background: '#ffebee',
               border: '1px solid #f44336',
@@ -1114,6 +1161,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 value={secondaryPmCodeInput}
                 onChange={(e) => setSecondaryPmCodeInput(e.target.value)}
                 placeholder="Enter Secondary PM Code"
+                style={{ marginBottom: '15px' }}
               />
             </div>
             <div className="form-group">
@@ -1123,6 +1171,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                 value={leafPmCodeInput}
                 onChange={(e) => setLeafPmCodeInput(e.target.value)}
                 placeholder="Enter Leaf PM Code"
+                style={{ marginBottom: '15px' }}
               />
             </div>
             <div className="form-group">
@@ -1212,6 +1261,40 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="submit-button" onClick={() => setHistoryModal(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Product Details Modal */}
+      {viewProductModal && (
+        <div className="modal-overlay" onClick={() => setViewProductModal(null)}>
+          <div className="modal" style={{ maxWidth: '650px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ color: '#1a237e', marginBottom: '16px' }}>
+              📦 Product Details — {viewProductModal.product_name}
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', background: '#f8fafc', padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div><strong>SKU Code:</strong> {viewProductModal.sku_code}</div>
+              <div><strong>Product Name:</strong> {viewProductModal.product_name}</div>
+              <div><strong>Country:</strong> {viewProductModal.country?.name || '—'}</div>
+              <div><strong>Customer:</strong> {viewProductModal.customer || '—'}</div>
+              <div><strong>Pack Size:</strong> {viewProductModal.pack_size || '—'}</div>
+              <div><strong>Standard Batch Size:</strong> {viewProductModal.standard_batch_size || '—'}</div>
+              <div><strong>MOQ:</strong> {viewProductModal.moq || '—'}</div>
+              <div><strong>Primary PM Code:</strong> {viewProductModal.primary_pm_code || '—'}</div>
+              <div><strong>Secondary PM Code:</strong> {viewProductModal.secondary_pm_code || '—'}</div>
+              <div><strong>Leaf PM Code:</strong> {viewProductModal.leaf_pm_code || '—'}</div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <strong>Artwork Status:</strong>{' '}
+                <span className={`status-badge ${getArtworkStatusClass(viewProductModal.artwork_status)}`}>
+                  {viewProductModal.artwork_status}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button className="submit-button" onClick={() => setViewProductModal(null)}>
                 Close
               </button>
             </div>

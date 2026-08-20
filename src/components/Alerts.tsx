@@ -88,7 +88,7 @@ const Alerts: React.FC<AlertsProps> = ({ user, onLogout, refreshAlerts }) => {
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} refreshAlerts={refreshAlerts} />
 
       <div className="panel">

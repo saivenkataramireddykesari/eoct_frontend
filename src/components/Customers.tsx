@@ -57,7 +57,7 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
     try {
       setLoading(true);
       const skip = (p - 1) * pageSize;
-      const response = await customerAPI.getCustomers(undefined, undefined, undefined, undefined, skip, pageSize);
+      const response = await customerAPI.getCustomers(undefined, undefined, undefined, skip, pageSize);
       setCustomers(response.data);
       setHasMore(response.data.length === pageSize);
     } catch (error) {
@@ -249,7 +249,7 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div className="panel">

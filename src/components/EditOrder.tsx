@@ -14,7 +14,7 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
 
   useEffect(() => {
     if (!user || user.department !== 'Exports' || user.role !== 'user') {
-      navigate('/dashboard'); // Or any other appropriate route
+      navigate('/orders'); // Or any other appropriate route
       alert('You are not authorized to edit orders.');
     }
   }, [user, navigate]);
@@ -203,7 +203,7 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
   if (loadingDetails) return <div className="loading">Loading order details...</div>;
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div style={{ maxWidth: '820px', margin: '0 auto', padding: '24px 16px' }}>

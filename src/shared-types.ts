@@ -53,6 +53,8 @@ export interface Product {
   sku_code: string;
   product_name: string;
   category?: string | null;
+  price?: number | null;
+
   country_id?: number | null;
   country?: Country | null; // Relationship
   customer?: string | null; 
@@ -103,14 +105,14 @@ export interface Customer {
   order_type?: string;
   default_artwork_status?: string;
   order_count?: number;
-  category?: string;
+
 }
 
 export interface Milestone {
   id: number;
   order_id: number;
   name: string;
-  category: string;
+
   status: string;
   target_date?: string | null;
   actual_date?: string | null;
@@ -230,7 +232,7 @@ export interface CanApproveResponse {
 }
 
 export interface BulkTargetDateItem {
-  milestone_id: number;
+  milestone_id: number | null;
   target_date?: string | null;
 }
 
@@ -261,4 +263,16 @@ export interface SearchSuggestion {
 
 export interface SearchSuggestionsResponse {
   suggestions: SearchSuggestion[];
+}
+
+export interface FullSearchResultItem {
+  type: string; // e.g., "product", "customer", "order"
+  id: string; // e.g., SKU code, customer ID, order ID
+  name: string; // Primary name/identifier for display
+  description?: string; // Additional details for display
+  link: string; // Frontend route to view details of the item
+}
+
+export interface FullSearchResponse {
+  results: FullSearchResultItem[];
 }

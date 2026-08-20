@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { productAPI } from '../services/api';
+import { Product } from '../shared-types';
 
 interface ProductItemProps {
   product: any;
@@ -10,57 +11,56 @@ interface ProductItemProps {
   currencies: string[]; // Add this
   selectedCountry: string;
   selectedCustomerId: string;
+  availableSkus: { sku_code: string; product_name: string }[]; // New prop
 }
 
-const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMany, onRemove, errors, currencies, selectedCountry, selectedCustomerId }) => {
-  const [allProducts, setAllProducts] = useState<any[]>([]);
+const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMany, onRemove, errors, currencies, selectedCountry, selectedCustomerId, availableSkus }) => {
 
-  useEffect(() => {
-    const fetchFilteredProducts = async () => {
-      if (!selectedCountry || !selectedCustomerId) {
-        setAllProducts([]);
-        return;
-      }
-      try {
-        const response = await productAPI.getProductsFiltered(selectedCountry, selectedCustomerId);
-        setAllProducts(response.data);
-      } catch (error) {
-        console.error("Error fetching filtered products:", error);
-      }
-    };
-    fetchFilteredProducts();
-  }, [selectedCountry, selectedCustomerId]);
 
   const totalQuantity = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);
   const totalPrice = totalQuantity * (parseFloat(product.price) || 0);
 
-  // Populate product fields from the already-fetched allProducts list
-  // Uses onUpdateMany to merge all fields in ONE setState call — avoids the stale-closure
-  // problem where successive onUpdate() calls each only see the original product snapshot.
   useEffect(() => {
-    if (product.skuCode && allProducts.length > 0) {
-      const found = allProducts.find((p: any) => p.sku_code === product.skuCode);
-      if (found) {
+    const fetchProductDetails = async () => {
+      if (product.skuCode) {
+        try {
+          const response = await productAPI.getProductBySku(product.skuCode);
+          const fetchedProduct: Product = response.data;
+          onUpdateMany(product.id, {
+            productName: fetchedProduct.product_name || '',
+            category: fetchedProduct.category || '',
+            packSize: fetchedProduct.pack_size || '',
+            batchSize: fetchedProduct.standard_batch_size ? String(fetchedProduct.standard_batch_size) : '',
+            moq: fetchedProduct.moq ? String(fetchedProduct.moq) : '',
+            artworkStatus: fetchedProduct.artwork_status || 'Not Available',
+            primaryPmCode: fetchedProduct.primary_pm_code || '',
+            secondaryPmCode: fetchedProduct.secondary_pm_code || '',
+            leafPmCode: fetchedProduct.leaf_pm_code || '',
+            price: fetchedProduct.price ? String(fetchedProduct.price) : '',
+          });
+        } catch (error) {
+          console.error("Error fetching product details by SKU:", error);
+          // Optionally, show an error message to the user or clear fields
+          onUpdateMany(product.id, {
+            productName: '', category: '', packSize: '',
+            batchSize: '', moq: '', artworkStatus: 'Not Available', primaryPmCode: '', secondaryPmCode: '', leafPmCode: '',
+            price: '', totalPrice: 0,
+          });
+        }
+      } else {
+        // Clear fields if SKU is cleared
         onUpdateMany(product.id, {
-          productName:  found.product_name                                     || '',
-          category:     found.category                                         || '',
-          packSize:     found.pack_size                                        || '',
-          batchSize:    found.standard_batch_size ? String(found.standard_batch_size) : '',
-          moq:          found.moq                 ? String(found.moq)          : '',
-          artworkStatus: found.artwork_status                                  || 'Not Available',
-          pmCode:       found.pm_code                                          || '',
-          price:        found.price               ? String(found.price)        : '', // Assuming product data has a price field
+          productName: '', category: '', packSize: '',
+          batchSize: '', moq: '', artworkStatus: 'Not Available', primaryPmCode: '', secondaryPmCode: '', leafPmCode: '',
+          price: '', totalPrice: 0,
         });
       }
-    }
-    if (!product.skuCode) {
-      onUpdateMany(product.id, {
-        productName: '', category: '', packSize: '',
-        batchSize: '', moq: '', artworkStatus: 'Not Available', primaryPmCode: '', secondaryPmCode: '', leafPmCode: '',
-        price: '', totalPrice: 0, // Reset price and totalPrice
-      });
-    }
-  }, [product.skuCode, allProducts]); // deps: SKU selection + available product list
+    };
+
+    fetchProductDetails();
+  }, [product.skuCode]); // Trigger when SKU code changes
+
+
 
   // Recalculate totalPrice whenever salesQty, freeQty, or price changes
   useEffect(() => {
@@ -108,9 +108,9 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMa
         <div style={fld}>
           <label style={lbl}>SKU Code *</label>
           <select value={product.skuCode} onChange={e => onUpdate(product.id, 'skuCode', e.target.value)} required
-            style={allProducts.length > 0 ? inp : inpDis} disabled={allProducts.length === 0}>
-            <option value="">{allProducts.length > 0 ? '— Select SKU —' : 'No products available'}</option>
-            {allProducts.map((p: any) => (
+            style={availableSkus.length > 0 ? inp : inpDis} disabled={availableSkus.length === 0}>
+            <option value="">{availableSkus.length > 0 ? '— Select SKU —' : 'No products available'}</option>
+            {availableSkus.map((p: any) => (
               <option key={p.sku_code} value={p.sku_code}>{`${p.sku_code} - ${p.product_name}`}</option>
             ))}
           </select>
@@ -120,7 +120,7 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMa
           <input type="text" value={product.productName} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
         </div>
         <div style={fld}>
-          <label style={lbl}>Category</label>
+          <label style={lbl}>Manufacturing Unit</label>
           <input type="text" value={product.category} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
         </div>
         <div style={fld}>

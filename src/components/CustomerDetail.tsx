@@ -40,7 +40,7 @@ const CustomerDetail: React.FC<CustomerDetailProps> = ({ user, onLogout }) => {
 
   if (loading) {
     return (
-      <div className="dashboard-container">
+      <div className="main-container">
         <Header user={user} onLogout={onLogout} />
         <div className="panel">
           <div className="loading-message">Loading customer details...</div>
@@ -51,7 +51,7 @@ const CustomerDetail: React.FC<CustomerDetailProps> = ({ user, onLogout }) => {
 
   if (error) {
     return (
-      <div className="dashboard-container">
+      <div className="main-container">
         <Header user={user} onLogout={onLogout} />
         <div className="panel">
           <div className="error-message">{error}</div>
@@ -62,7 +62,7 @@ const CustomerDetail: React.FC<CustomerDetailProps> = ({ user, onLogout }) => {
 
   if (!customer) {
     return (
-      <div className="dashboard-container">
+      <div className="main-container">
         <Header user={user} onLogout={onLogout} />
         <div className="panel">
           <div className="no-data-message">No customer found.</div>
@@ -72,7 +72,7 @@ const CustomerDetail: React.FC<CustomerDetailProps> = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
       <div className="panel">
         <div className="panel-header">

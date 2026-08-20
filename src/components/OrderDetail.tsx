@@ -1,20 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { IMilestone, IOrder, IApproval, IUser, IAuditLog, IMilestoneHistoryEntry } from '../types';
 import { useParams, useNavigate } from 'react-router-dom';
 import { orderAPI, auditAPI } from '../services/api';
 import Header from './Header';
 
 interface OrderDetailProps {
-  user: any;
+  user: IUser;
   onLogout: () => void;
 }
 
 const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<IOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [canApproveStatus, setCanApproveStatus] = useState<any>(null);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]); // New auditLogs state
+  const [auditLogs, setAuditLogs] = useState<IAuditLog[]>([]); // New auditLogs state
   const [approvalModal, setApprovalModal] = useState(false);
   const [approvalData, setApprovalData] = useState({
     decision: 'APPROVED',
@@ -26,55 +27,216 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   });
   const [remarksRequired, setRemarksRequired] = useState(false);
   const [milestoneModal, setMilestoneModal] = useState(false);
-  const [selectedMilestone, setSelectedMilestone] = useState<any>(null);
+  const [selectedMilestone, setSelectedMilestone] = useState<IMilestone | null>(null);
   const [milestoneData, setMilestoneData] = useState({
     status: 'COMPLETED',
     target_date: '',
     actual_date: '',
     remarks: '',
   });
-  const [milestoneHistory, setMilestoneHistory] = useState<any[]>([]);
+  const [milestoneHistory, setMilestoneHistory] = useState<IMilestoneHistoryEntry[]>([]);
   const [showMilestoneHistoryModal, setShowMilestoneHistoryModal] = useState(false);
   const [bulkTargetModal, setBulkTargetModal] = useState(false);
-  const [bulkTargetDates, setBulkTargetDates] = useState<{ [milestoneId: number]: string }>({});
+  // Keyed by NORMALIZED milestone NAME — works even when the milestone doesn't exist in DB yet
+  const [bulkTargetDates, setBulkTargetDates] = useState<Record<string, string>>({});
+  const [bulkMilestoneIds, setBulkMilestoneIds] = useState<Record<string, number | null>>({});
+  const originalBulkTargetDatesRef = useRef<Record<string, string>>({});
+  const currentBulkTargetDatesRef = useRef<Record<string, string>>({});
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
+  // Helper function to normalize date strings for comparison
+  const normalizeDate = (dateInput: string | null | undefined): string => {
+    if (!dateInput) return '';
+    const dateString = String(dateInput).trim();
+    if (!dateString) return '';
+
+    // Check for YYYY-MM-DD format (HTML date input standard)
+    const yyyyMmDdMatch = dateString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (yyyyMmDdMatch) {
+      // Validate if it's a real date
+      const date = new Date(dateString);
+      if (!isNaN(date.getTime())) {
+        return dateString;
+      }
+    }
+
+    // Check for DD-MM-YYYY format
+    const ddMmYyyyMatch = dateString.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (ddMmYyyyMatch) {
+      const [, day, month, year] = ddMmYyyyMatch;
+      const isoDateString = `${year}-${month}-${day}`;
+      // Validate if it's a real date
+      const date = new Date(isoDateString);
+      if (!isNaN(date.getTime())) {
+        return isoDateString;
+      }
+    }
+
+    // Attempt to parse with new Date() as a fallback for other formats, then validate
+    const fallbackDate = new Date(dateString);
+    if (!isNaN(fallbackDate.getTime())) {
+      return fallbackDate.toISOString().split('T')[0];
+    }
+
+    return ''; // Invalid date format, return empty string
+  };
+
+  const formatDateDisplay = (dateInput: string | null | undefined): string => {
+    if (!dateInput) return '-';
+    const dateString = String(dateInput).trim();
+    if (!dateString) return '-';
+    const cleanStr = dateString.split('T')[0];
+    const parts = cleanStr.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+      const [year, month, day] = parts;
+      return `${day}/${month}/${year}`;
+    }
+    const d = new Date(dateString);
+    return isNaN(d.getTime()) ? dateString : d.toLocaleDateString();
+  };
+
+  const REQUIRED_TARGET_MILESTONES = [
+    'PO Released',
+    'PM Received',
+    'Production Planned',
+    'Production Started',
+    'Production Completed',
+    'Batch Released'
+  ];
+
+  const normalizeMilestoneName = (value: unknown) =>
+    String(value ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
 
   const openBulkTargetModal = () => {
-    const initialDates: { [key: number]: string } = {};
-    (order?.milestones || []).forEach((m: any) => {
-      initialDates[m.id] = m.target_date ? m.target_date.split('T')[0] : '';
-    });
-    setBulkTargetDates(initialDates);
-    setBulkTargetModal(true);
-  };
+  // Map existing DB milestones by normalized name (handles the PM Procurement Released → PO Released alias)
+  const milestoneMap = new Map<string, IMilestone>(
+    (order?.milestones || []).map((milestone: IMilestone) => [
+      normalizeMilestoneName(milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name),
+      milestone
+    ])
+  );
+
+  // DEBUG: see which milestones exist in DB and which are missing
+  console.table(
+    REQUIRED_TARGET_MILESTONES.map(name => {
+      const key = normalizeMilestoneName(name);
+      const milestone = milestoneMap.get(key);
+      return {
+        requiredName: name,
+        existsInDb: Boolean(milestone),
+        databaseId: milestone?.id ?? null,
+        existingTargetDate: milestone?.target_date ?? null,
+      };
+    })
+  );
+
+  const initialDates: Record<string, string> = {};
+  const ids: Record<string, number | null> = {};
+
+  // ✅ ALWAYS create an entry for every required milestone —
+  // missing ones get a real DB id later (or null = will be created on save)
+  REQUIRED_TARGET_MILESTONES.forEach(name => {
+    const key = normalizeMilestoneName(name);
+    const milestone = milestoneMap.get(key);
+    ids[key] = milestone && typeof milestone.id === 'number' ? milestone.id : null;
+    initialDates[key] = normalizeDate(milestone?.target_date);
+  });
+
+  setBulkMilestoneIds(ids);
+  originalBulkTargetDatesRef.current = { ...initialDates };
+  currentBulkTargetDatesRef.current = { ...initialDates };
+  setBulkTargetDates({ ...initialDates });
+  setBulkTargetModal(true);
+};
 
   const handleBulkTargetSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const milestonesPayload = (order?.milestones || []).map((m: any) => ({
-        milestone_id: m.id,
-        target_date: bulkTargetDates[m.id] || null,
-      }));
-      console.log('Sending bulk target dates update data:', milestonesPayload);
-      const response = await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
-      console.log('Bulk target dates update response:', response.data);
-      setBulkTargetModal(false);
-      fetchOrder();
-    } catch (error: any) {
-      console.error('Error saving bulk target dates:', error);
-      alert(error.response?.data?.detail || 'Failed to save milestone target dates');
-    }
-  };
+  e.preventDefault();
+  if (isSubmittingBulk) return;
 
+  if (!order) {
+    alert('Order data is missing.');
+    return;
+  }
+
+  // 1. Every required milestone must have a valid date
+  const missing = REQUIRED_TARGET_MILESTONES.filter(
+    name => !normalizeDate(currentBulkTargetDatesRef.current[normalizeMilestoneName(name)])
+  );
+  if (missing.length > 0) {
+    alert('Please enter a target date for:\n• ' + missing.join('\n• '));
+    return;
+  }
+
+  // 2. Only send milestones whose date actually changed
+  const changed = REQUIRED_TARGET_MILESTONES.filter(name => {
+    const key = normalizeMilestoneName(name);
+    return (
+      normalizeDate(currentBulkTargetDatesRef.current[key]) !==
+      normalizeDate(originalBulkTargetDatesRef.current[key])
+    );
+  });
+
+  if (changed.length === 0) {
+    alert('No target dates were changed.');
+    return;
+  }
+
+  // 3. Build payload — real id when available, name ALWAYS (backend fallback)
+  const milestonesPayload = changed.map(name => {
+    const key = normalizeMilestoneName(name);
+    const realId = bulkMilestoneIds[key];
+    return {
+      milestone_id: typeof realId === 'number' ? realId : null,   // ✅ null, not 0
+      milestone_name: name,                                        // ✅ always send
+      target_date: normalizeDate(currentBulkTargetDatesRef.current[key]) || null,
+    };
+  });
+
+  console.log('[MILESTONE BULK PAYLOAD]', milestonesPayload);
+
+  try {
+    setIsSubmittingBulk(true);
+    await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
+    setBulkTargetModal(false);
+    await fetchOrder(false);
+  } catch (error: any) {
+    console.error('Error saving bulk target dates:', error);
+    alert(error.response?.data?.detail || 'Failed to save milestone target dates');
+  } finally {
+    setIsSubmittingBulk(false);
+  }
+};
 
   useEffect(() => {
-    fetchOrder();
+    fetchOrder(); // Initial fetch should not skip audit/approval
   }, [id]);
 
   useEffect(() => {
     const fetchMilestoneHistory = async () => {
       if (selectedMilestone) {
+        let realId = selectedMilestone.id;
+        if (typeof realId === 'string' && realId.startsWith('virtual-')) {
+          const foundReal = (order?.milestones || []).find((m: IMilestone) => {
+            if (!m?.name) return false;
+            const normName = m.name === 'PM Procurement Released' ? 'PO Released' : m.name.trim();
+            return normName === selectedMilestone.name;
+          });
+          if (foundReal && typeof foundReal.id === 'number') {
+            realId = foundReal.id;
+          } else {
+            setMilestoneHistory([]);
+            return;
+          }
+        }
         try {
-          const response = await orderAPI.getMilestoneHistory(selectedMilestone.id);
+          if (typeof realId !== 'number') { // Added check
+            console.error('Milestone history can only be fetched for numeric IDs.');
+            setMilestoneHistory([]);
+            return;
+          }
+          const response = await orderAPI.getMilestoneHistory(realId);
           setMilestoneHistory(response.data);
         } catch (error) {
           console.error('Error fetching milestone history:', error);
@@ -85,7 +247,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     fetchMilestoneHistory();
   }, [selectedMilestone]);
 
-  const fetchOrder = async () => {
+  const fetchOrder = async (skipAuditAndApproval = false) => {
     const orderIdNum = parseInt(id || '');
     if (!id || isNaN(orderIdNum)) {
       setLoading(false);
@@ -96,16 +258,18 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
       const response = await orderAPI.getOrder(orderIdNum);
       setOrder(response.data);
       
-      // Fetch audit logs
-      try {
-        const auditResponse = await auditAPI.getAuditLogs(orderIdNum);
-        setAuditLogs(auditResponse.data);
-      } catch (err) {
-        console.error('Error fetching audit logs:', err);
+      if (!skipAuditAndApproval) {
+        // Fetch audit logs
+        try {
+          const auditResponse = await auditAPI.getAuditLogs(orderIdNum);
+          setAuditLogs(auditResponse.data);
+        } catch (err) {
+          console.error('Error fetching audit logs:', err);
+        }
+        
+        // Check if user can approve based on sequential workflow
+        await checkCanApprove(orderIdNum);
       }
-      
-      // Check if user can approve based on sequential workflow
-      await checkCanApprove(orderIdNum);
     } catch (error) {
       console.error('Error fetching order:', error);
     } finally {
@@ -131,14 +295,14 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
       return;
     }
 
-    // Remarks are mandatory for SCM override OR rejection OR Regulatory approval
+    // Remarks are mandatory for SCM override OR when rejecting an order
     const needsRemarks =
-      user.department === 'SCM' || approvalData.decision === 'REJECTED' || (user.department === 'Regulatory' && approvalData.decision === 'APPROVED');
+      (user.department === 'SCM' && canApproveStatus?.is_scm_override) || approvalData.decision === 'REJECTED';
     if (needsRemarks && !approvalData.remarks.trim()) {
       alert(
-        user.department === 'SCM'
-          ? 'SCM must provide remarks when overriding an approval.'
-          : 'Remarks are mandatory when rejecting an order.'
+        approvalData.decision === 'REJECTED'
+          ? 'Remarks are mandatory when rejecting an order.'
+          : 'SCM must provide remarks when overriding an approval.'
       );
       return;
     }
@@ -171,22 +335,49 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
   const handleMilestoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!milestoneData.remarks || !milestoneData.remarks.trim()) {
+      alert('Remarks are mandatory when updating a milestone.');
+      return;
+    }
     try {
       const dataToSend = {
         ...milestoneData,
         target_date: milestoneData.target_date || null, // Convert empty string to null
         actual_date: milestoneData.actual_date || null, // Convert empty string to null
+        remarks: milestoneData.remarks.trim(),
       };
       console.log('Sending milestone update data:', dataToSend);
+
+      // Find real milestone ID if virtual item was selected
+      let realId = selectedMilestone!.id;
+      if (typeof realId === 'string' && realId.startsWith('virtual-')) {
+        const foundReal = (order?.milestones || []).find((m: IMilestone) => {
+          if (!m?.name) return false;
+          const normName = m.name === 'PM Procurement Released' ? 'PO Released' : m.name.trim();
+          return normName === selectedMilestone!.name;
+        });
+        if (foundReal) {
+          realId = foundReal.id;
+        } else {
+          alert('Milestone record not initialized in database yet.');
+          return;
+        }
+      }
+
+      if (typeof realId !== 'number') { // Added check
+        alert('Cannot update milestone with a non-numeric ID.');
+        return;
+      }
       const response = await orderAPI.updateMilestone(
-        selectedMilestone.id,
+        realId,
         dataToSend
       );
       console.log('Milestone update response:', response.data);
       setMilestoneModal(false);
       fetchOrder();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating milestone:', error);
+      alert(error.response?.data?.detail || 'Failed to update milestone');
     }
   };
 
@@ -226,7 +417,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   const hasPendingApproval = () => {
     if (!order?.approvals) return false;
     return order.approvals.some(
-      (a: any) => a.department === user.department && a.status === 'PENDING'
+      (a: IApproval) => a.department === user.department && a.status === 'PENDING'
     );
   };
 
@@ -248,39 +439,105 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
       user.department === 'Exports' &&
       user.role?.toLowerCase() !== 'manager'; // Team members, not the manager
     if (!isExportsTeam) return false;
-    const allPending = order.approvals.every((a: any) => a.status === 'PENDING');
+    const allPending = order.approvals.every((a: IApproval) => a.status === 'PENDING');
     return allPending;
   };
 
-  // Logistics milestones: ONLY Exports team (user or manager). Management cannot edit.
-  // SCM/Artwork milestones: SCM or Management.
-  const canUpdateMilestone = (milestoneCategory: string) => {
-    if (milestoneCategory === 'Logistics') {
-      return user.department === 'Exports' || user.department === 'Exports Team' || user.department?.startsWith('Exports');
-    }
-    if (milestoneCategory === 'SCM' || milestoneCategory === 'Artwork') {
+  // Milestones editable by SCM: PO Released, PM Received, Production Planned, Production Started, Production Completed, Batch Released
+  // Remaining milestones (Ready for Shipment, Freight Booked, Shipped, Delivered) editable by Exports team
+  const canUpdateMilestone = (milestone: IMilestone) => {
+    const scmMilestones = [
+      'PO Released',
+      'PM Procurement Released',
+      'PM Received',
+      'Production Planned',
+      'Production Started',
+      'Production Completed',
+      'Batch Released'
+    ];
+    const rawName = milestone?.name ? String(milestone.name).trim() : '';
+    const isSCMMilestone = scmMilestones.includes(rawName);
+
+    if (isSCMMilestone) {
       return user.department === 'SCM' || user.department === 'Management';
+    } else {
+      return user.department === 'Exports' || user.department === 'Exports Team' || user.department?.startsWith('Exports') || user.department === 'Management';
     }
-    return false;
   };
 
-  // Get sorted approvals by sequence
+  // Get sorted and deduplicated approvals (1: Exports Initial, 2: Regulatory, 3: Finance, 4: Exports Final)
   const getSortedApprovals = () => {
     if (!order?.approvals) return [];
-    return [...order.approvals].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    const seqMap: { [key: string]: number } = {
+      'EXPORTS_MANAGER_INITIAL': 1,
+      'REGULATORY': 2,
+      'FINANCE': 3,
+      'EXPORTS_MANAGER_FINAL': 4
+    };
+    const uniqueMap = new Map<string, IApproval>();
+    [...order.approvals].forEach((app: IApproval) => {
+      const deptKey = app.department;
+      if (!uniqueMap.has(deptKey) || (app.status !== 'PENDING' && uniqueMap.get(deptKey)?.status === 'PENDING')) {
+        uniqueMap.set(deptKey, {
+          ...app,
+          sequence: seqMap[app.department] || app.sequence
+        });
+      }
+    });
+    return Array.from(uniqueMap.values()).sort((a: IApproval, b: IApproval) => (a.sequence || 0) - (b.sequence || 0));
   };
 
-  const canShowApproveButton = (approval: any) => {
-    // Add console debugging as requested
-    console.log({
-        userDepartment: user.department,
-        userRole: user.role,
-        approvalDepartment: approval.department,
-        approvalSequence: approval.sequence,
-        approvalStatus: approval.status,
-        canApproveStatus
+  // Standard list of required execution milestones in specified sequence
+  const STANDARD_EXECUTION_MILESTONES = [
+    { name: 'PO Released', category: 'Artwork' },
+    { name: 'PM Received', category: 'Artwork' },
+    { name: 'Production Planned', category: 'SCM' },
+    { name: 'Production Started', category: 'SCM' },
+    { name: 'Production Completed', category: 'SCM' },
+    { name: 'Batch Released', category: 'SCM' },
+    { name: 'Ready for Shipment', category: 'Logistics' },
+    { name: 'Freight Booked', category: 'Logistics' },
+    { name: 'Shipped', category: 'Logistics' },
+    { name: 'Delivered', category: 'Logistics' },
+  ];
+
+  // Get deduplicated milestones safely for all 10 standard milestone names
+  const getUniqueMilestones = () => {
+    const rawMilestones: IMilestone[] = order && Array.isArray(order.milestones) ? order.milestones : [];
+    const milestoneMap = new Map<string, IMilestone>();
+
+    rawMilestones.forEach((m: IMilestone) => {
+      if (!m) return;
+      const rawName = m.name ? String(m.name).trim() : '';
+      const normName = rawName === 'PM Procurement Released' ? 'PO Released' : rawName;
+      if (!normName) return;
+      if (!milestoneMap.has(normName) || (m.status === 'COMPLETED' && milestoneMap.get(normName)?.status !== 'COMPLETED')) {
+        milestoneMap.set(normName, m);
+      }
     });
 
+    return STANDARD_EXECUTION_MILESTONES.map((std, idx) => {
+      const existing = milestoneMap.get(std.name);
+      if (existing) {
+        return {
+          ...existing,
+          name: std.name,
+          category: existing.category || std.category,
+        };
+      }
+      return {
+        id: `virtual-${idx}-${std.name}`,
+        name: std.name,
+        category: std.category,
+        status: 'PENDING',
+        target_date: null,
+        actual_date: null,
+        remarks: null,
+      };
+    });
+  };
+
+  const canShowApproveButton = (approval: IApproval) => {
     if (approval.status !== 'PENDING') {
       return false;
     }
@@ -288,8 +545,9 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     // For Exports Manager
     const isExportsManager = user.department === 'Exports';
     if (isExportsManager) {
-      // Exports Manager handles initial (sequence 1) and final (sequence 4) approvals.
+      // Only Exports Manager (role === 'manager') handles initial and final approvals.
       return (
+        user.role === 'manager' &&
         (approval.department === 'EXPORTS_MANAGER_INITIAL' || approval.department === 'EXPORTS_MANAGER_FINAL') &&
         canApproveStatus?.can_approve === true &&
         approval.sequence === canApproveStatus?.current_sequence
@@ -322,7 +580,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   const isSCMTeam = user.department === 'SCM';
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div className="panel">
@@ -447,7 +705,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 </tr>
               </thead>
               <tbody>
-                {sortedApprovals.map((approval: any) => {
+                {sortedApprovals.map((approval: IApproval) => {
                   const getDays = () => {
                     if (!approval.approved_at || !order?.created_at) return '-';
                     const diffTime = new Date(approval.approved_at).getTime() - new Date(order.created_at).getTime();
@@ -543,7 +801,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
           {/* Mobile Card View for Approvals */}
           <div className="mobile-table-cards">
-            {sortedApprovals.map((approval: any) => {
+            {sortedApprovals.map((approval: IApproval) => {
               const isScmOverride =
                 approval.remarks && approval.remarks.startsWith('[SCM Override]');
               const showApproveBtn = canShowApproveButton(approval);
@@ -627,15 +885,14 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Execution Milestones</h3>
 
+            {user.department === 'SCM' && (
+              <button className="nav-button" onClick={openBulkTargetModal}>
+                Set Target Dates
+              </button>
+            )}
           </div>
 
-          {user.department === 'SCM' && (
-            <div style={{ marginBottom: '15px', textAlign: 'right' }}>
-              <button className="nav-button" onClick={openBulkTargetModal}>
-                Set Bulk Target Dates
-              </button>
-            </div>
-          )}
+
 
           <div className="table-container">
             <table className="data-table">
@@ -651,7 +908,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               </thead>
 
               <tbody>
-                {order.milestones?.map((milestone: any) => (
+                {getUniqueMilestones().map((milestone: IMilestone) => (
                   <tr key={milestone.id}>
                     <td>
                       {milestone.name === "PM Procurement Released"
@@ -665,23 +922,14 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                       </span>
                     </td>
 
-                    <td>
-                      {milestone.target_date
-                        ? new Date(milestone.target_date).toLocaleDateString()
-                        : "-"}
-                    </td>
-
-                    <td>
-                      {milestone.actual_date
-                        ? new Date(milestone.actual_date).toLocaleDateString()
-                        : "-"}
-                    </td>
+                    <td>{formatDateDisplay(milestone.target_date)}</td>
+                    <td>{formatDateDisplay(milestone.actual_date)}</td>
 
                     <td>{milestone.remarks || "-"}</td>
 
                     <td>
                       <div style={{ display: "flex", gap: "6px" }}>
-                        {canUpdateMilestone(milestone.category) && (
+                        {canUpdateMilestone(milestone) && (
                           <button
                             className="nav-button"
                             onClick={() => {
@@ -717,9 +965,9 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
               {['Artwork', 'SCM', 'Logistics'].map((category) => (
                 <div key={category} className="mobile-table-cards">
-                {order.milestones
-                  ?.filter((m: any) => m.category === category)
-                  .map((milestone: any) => (
+                {getUniqueMilestones()
+                  ?.filter((m: IMilestone) => m.category === category)
+                  .map((milestone: IMilestone) => (
                     <div key={milestone.id} className="mobile-card">
                       <div className="mobile-card-row">
                         <span className="mobile-card-label">Milestone</span>
@@ -750,7 +998,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                         <span className="mobile-card-value">{milestone.remarks || '-'}</span>
                       </div>
                       <div className="mobile-card-row">
-                        {canUpdateMilestone(category) ? (
+                        {canUpdateMilestone(milestone) ? (
                           <button
                             className="nav-button"
                             onClick={() => {
@@ -788,7 +1036,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               overflowY: 'auto',
               paddingRight: '10px'
             }}>
-              {auditLogs.map((log: any) => (
+              {auditLogs.map((log: IAuditLog) => (
                 <div key={log.id} style={{
                   padding: '14px 16px',
                   background: '#f8fafc',
@@ -840,6 +1088,36 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 ? `⭐ Exports Manager Override — ${canApproveStatus?.pending_department || ''} Approval`
                 : 'Submit Approval')}
             </h2>
+            {/* Show Primary, Secondary, and Leaf PM codes inside the modal */}
+            {order?.product && (
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '6px',
+                padding: '12px',
+                marginBottom: '16px',
+                fontSize: '0.9em'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>📦 PM Codes for SKU ({order.sku})</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.85em' }}>Primary PM Code</span>
+                    <strong style={{ color: order.product.primary_pm_code ? '#0f172a' : '#ef4444' }}>
+                      {order.product.primary_pm_code || 'Not Set'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.85em' }}>Secondary PM Code</span>
+                    <strong>{order.product.secondary_pm_code || 'N/A'}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b', display: 'block', fontSize: '0.85em' }}>Leaf PM Code</span>
+                    <strong>{order.product.leaf_pm_code || 'N/A'}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {!isSCMTeam && canApproveStatus?.is_scm_override && (
               <div style={{
                 background: '#fff3e0',
@@ -891,7 +1169,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                     onChange={(e) => setApprovalData({ ...approvalData, target_department: e.target.value })}
                   >
                     <option value="">Select Department to Override</option>
-                    {order?.approvals.map((approval: any) => (
+                    {order?.approvals.map((approval: IApproval) => (
                       <option key={approval.id} value={approval.department}>
                         {approval.department} (Current Status: {approval.status})
                       </option>
@@ -928,7 +1206,6 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                   </select>
                 </div>
               )}
-
 
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -983,14 +1260,17 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               </div>
 
               <div className="form-group">
-                <label>Remarks</label>
+                <label>
+                  Remarks <span style={{ color: '#e53935', marginLeft: '4px' }}>* (Required)</span>
+                </label>
                 <textarea
                   value={milestoneData.remarks}
                   onChange={(e) => setMilestoneData({ ...milestoneData, remarks: e.target.value })}
                   rows={3}
+                  required
+                  placeholder="Enter mandatory remarks for updating this milestone..."
                 />
               </div>
-
 
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -1013,25 +1293,23 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               <p>No history available for this milestone.</p>
             ) : (
               <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '5px', padding: '10px' }}>
-                {milestoneHistory.map((entry: any) => (
-                  <div key={entry.id} style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px dotted #eee' }}>
-                    <p style={{ margin: 0, fontWeight: 'bold' }}>
-                      {new Date(entry.changed_at).toLocaleString()} - {entry.changed_by?.name || 'Unknown User'}
+                {milestoneHistory.map((entry: IMilestoneHistoryEntry) => (
+                  <div key={entry.id} style={{ marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px dotted #ccc' }}>
+                    <p style={{ margin: 0, fontWeight: 'bold', color: '#1e293b' }}>
+                      🕒 {new Date(entry.changed_at).toLocaleString()} — 👤 {entry.changed_by_user?.name || entry.changed_by?.name || 'Unknown User'} {entry.changed_by_user?.department ? `(${entry.changed_by_user.department})` : ''}
                     </p>
                     <p style={{ margin: '5px 0 0 0', fontSize: '0.9em' }}>
-                      <strong>Type:</strong> {entry.change_type}
+                      <strong>Change Type:</strong> {entry.change_type === 'TARGET_DATE_UPDATE' ? 'Target Date Update' : entry.change_type === 'STATUS_UPDATE' ? 'Status Update' : entry.change_type}
                     </p>
-                    <p style={{ margin: '0 0 0 0', fontSize: '0.9em' }}>
-                      <strong>Old Value:</strong> {entry.old_value && !isNaN(new Date(entry.old_value) as any) && (entry.change_type === 'TARGET_DATE_UPDATED' || entry.change_type === 'ACTUAL_DATE_UPDATED') ? new Date(entry.old_value).toLocaleDateString() : entry.old_value || 'N/A'}
+                    <p style={{ margin: '2px 0 0 0', fontSize: '0.9em' }}>
+                      <strong>Old Value:</strong> {entry.old_value || 'Not Set'}
                     </p>
-                    <p style={{ margin: '0 0 0 0', fontSize: '0.9em' }}>
-                      <strong>New Value:</strong> {entry.new_value && !isNaN(new Date(entry.new_value) as any) && (entry.change_type === 'TARGET_DATE_UPDATED' || entry.change_type === 'ACTUAL_DATE_UPDATED') ? new Date(entry.new_value).toLocaleDateString() : entry.new_value || 'N/A'}
+                    <p style={{ margin: '2px 0 0 0', fontSize: '0.9em' }}>
+                      <strong>New Value:</strong> {entry.new_value || 'Not Set'}
                     </p>
-                    {entry.remarks && (
-                      <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', fontStyle: 'italic', color: '#555' }}>
-                        <strong>Remarks:</strong> {entry.remarks}
-                      </p>
-                    )}
+                    <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#334155' }}>
+                      <strong>Remarks:</strong> {entry.remarks || 'No remarks provided'}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -1047,51 +1325,46 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
       {/* Bulk Target Dates Modal for Regulatory Department */}
       {bulkTargetModal && (
-        <div className="modal-overlay" onClick={() => setBulkTargetModal(false)}>
-          <div className="modal" style={{ maxWidth: '700px', width: '90%' }} onClick={(e) => e.stopPropagation()}>
-            <h2>📅 Set Milestone Target Dates — Order: {order?.order_number}</h2>
-            <p style={{ color: '#666', fontSize: '0.9em', marginBottom: '20px' }}>
-              Set target dates for each execution milestone for this order. Click Save Target Dates when done.
+        <div className="modal-overlay" onClick={() => { if (!isSubmittingBulk) setBulkTargetModal(false); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Set Target Dates</h2>
+            <p style={{ fontSize: '0.9em', color: '#666' }}>
+              Enter the planned target dates for the SCM execution milestones.
+              Milestones not yet in the system will be created automatically on save.
             </p>
             <form onSubmit={handleBulkTargetSubmit}>
-              <div style={{ maxHeight: '420px', overflowY: 'auto', paddingRight: '10px' }}>
-                {['Artwork', 'SCM', 'Logistics'].map((category) => {
-                  const catMilestones = (order?.milestones || []).filter((m: any) => m.category === category);
-                  if (catMilestones.length === 0) return null;
-                  return (
-                    <div key={category} style={{ marginBottom: '20px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <h4 style={{ margin: '0 0 10px 0', color: '#1e293b', borderBottom: '2px solid #cbd5e1', paddingBottom: '4px' }}>
-                        {category} Milestones
-                      </h4>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {catMilestones.map((m: any) => (
-                          <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px' }}>
-                            <div style={{ flex: 1 }}>
-                              <strong>{m.name === 'PM Procurement Released' ? 'PO Released' : m.name}</strong>
-                              <span className={`status-badge ${getStatusClass(m.status)}`} style={{ marginLeft: '8px', fontSize: '0.75em' }}>
-                                {m.status}
-                              </span>
-                            </div>
-                            <div style={{ width: '180px' }}>
-                              <input
-                                type="date"
-                                value={bulkTargetDates[m.id] || ''}
-                                onChange={(e) => setBulkTargetDates({ ...bulkTargetDates, [m.id]: e.target.value })}
-                                style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #ccc' }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
-                <button type="submit" className="submit-button" style={{ background: '#3f51b5', borderColor: '#3f51b5' }}>
-                  Save Target Dates
+              {REQUIRED_TARGET_MILESTONES.map(name => {
+                const key = normalizeMilestoneName(name);
+                const existsInDb = typeof bulkMilestoneIds[key] === 'number';
+                return (
+                  <div className="form-group" key={key}>
+                    <label>
+                      {name}
+                      {!existsInDb && (
+                        <span style={{ fontSize: '0.75em', color: '#ff6f00', marginLeft: '6px' }}>
+                          (new — will be created)
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={bulkTargetDates[key] || ''}
+                      onChange={(e) => {
+                        const next = { ...currentBulkTargetDatesRef.current, [key]: e.target.value };
+                        currentBulkTargetDatesRef.current = next;
+                        setBulkTargetDates(next);
+                      }}
+                    />
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button type="submit" className="nav-button" disabled={isSubmittingBulk}>
+                  {isSubmittingBulk ? 'Saving…' : 'Save Target Dates'}
                 </button>
-                <button type="button" className="nav-button" onClick={() => setBulkTargetModal(false)}>
+                <button type="button" className="nav-button" disabled={isSubmittingBulk}
+                        onClick={() => setBulkTargetModal(false)}>
                   Cancel
                 </button>
               </div>

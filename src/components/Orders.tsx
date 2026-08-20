@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { orderAPI } from '../services/api';
 import Header from './Header';
 
@@ -13,10 +13,20 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [productTypeFilter, setProductTypeFilter] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(15);
   const [hasMore, setHasMore] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const q = params.get('search') || params.get('query');
+    if (q) {
+      setSearchTerm(q);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     setPage(1);
@@ -86,12 +96,26 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     { value: 'DELIVERED', label: 'Delivered' },
   ];
 
+  const filteredOrders = orders.filter((order) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      (order.order_id && String(order.order_id).toLowerCase().includes(term)) ||
+      (order.order_number && order.order_number.toLowerCase().includes(term)) ||
+      (order.customer?.customer_name && order.customer.customer_name.toLowerCase().includes(term)) ||
+      (order.country?.name && order.country.name.toLowerCase().includes(term)) ||
+      (order.sku && order.sku.toLowerCase().includes(term)) ||
+      (order.status && order.status.toLowerCase().includes(term)) ||
+      (order.compliance_status && order.compliance_status.toLowerCase().includes(term))
+    );
+  });
+
   if (loading) {
     return <div className="loading">Loading orders...</div>;
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div className="panel">
@@ -107,29 +131,31 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
           )}
         </div>
 
-        <div className="filter-section">
-          <label>Filter by Status:</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            {statusOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+        <div className="filter-section" style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+
+          <div>
+            <label style={{ marginRight: '8px' }}>Filter by Status:</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {user.department === 'SCM' && (
-            <div style={{ marginLeft: '20px' }}>
-              <label>Filter by Product Type:</label>
+            <div>
+              <label style={{ marginRight: '8px' }}>Filter by Product Type:</label>
               <select
                 value={productTypeFilter}
                 onChange={(e) => setProductTypeFilter(e.target.value)}
               >
                 <option value="">All Product Types</option>
                 <option value="PP">PP</option>
-                {/* Add other product types as needed */}
               </select>
             </div>
           )}
@@ -145,7 +171,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                 <th>Customer</th>
                 <th>Country</th>
                 <th>SKU</th>
-                <th>Category</th>
+                <th>Manufacturing Unit</th>
                 <th>Quantity</th>
                 <th>Delivery Date</th>
                 <th>Status</th>
@@ -155,7 +181,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
+              {filteredOrders.map((order) => (
                 <tr
                   key={order.id}
                   onClick={() => navigate(`/orders/${order.id}`)}
@@ -193,7 +219,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <div
               key={order.id}
               className="mobile-card"

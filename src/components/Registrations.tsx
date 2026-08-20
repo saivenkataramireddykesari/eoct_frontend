@@ -16,8 +16,8 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   const [showModal, setShowModal] = useState(false);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [isRegistrationAutoFilled, setIsRegistrationAutoFilled] = useState(false); // New state for auto-fill
   const [formData, setFormData] = useState({
+    id: null, // Added for existing registration ID
     country: '',
     sku: '',
     registration_number: '',
@@ -63,7 +63,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   // Country change → immediately load SKUs for that country and reset SKU
   const handleCountryChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const countryName = e.target.value;
-    setFormData(prev => ({ ...prev, country: countryName, sku: '' }));
+    setFormData(prev => ({ ...prev, id: null, country: countryName, sku: '' }));
     setFilteredSkus([]);
     setFormError('');
     if (countryName) {
@@ -79,8 +79,35 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
     }
   };
 
+  const handleEdit = async (reg: any) => {
+    const countryName = reg.country?.name || '';
+    setFormData({
+      id: reg.id,
+      country: countryName,
+      sku: reg.sku || '',
+      registration_number: reg.registration_number || '',
+      registration_status: reg.registration_status || 'Active',
+      registration_issue_date: reg.registration_issue_date ? new Date(reg.registration_issue_date).toISOString().split('T')[0] : '',
+      registration_expiry_date: reg.registration_expiry_date ? new Date(reg.registration_expiry_date).toISOString().split('T')[0] : '',
+      remarks: reg.remarks || '',
+    });
+    setFormError('');
+    setShowModal(true);
+
+    if (countryName) {
+      try {
+        const response = await productAPI.getProductsByCountry(countryName);
+        setFilteredSkus(response.data || []);
+      } catch (error) {
+        console.error(`Error fetching products for ${countryName}:`, error);
+        setFilteredSkus([]);
+      }
+    }
+  };
+
   const resetForm = () => {
     setFormData({
+      id: null,
       country: '',
       sku: '',
       registration_number: '',
@@ -100,17 +127,30 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
     setSubmitting(true);
     console.log('Submitting form data:', formData); // Log form data before API call
     console.log('Current submitting state:', submitting);
-    console.log('Current isRegistrationAutoFilled state:', isRegistrationAutoFilled);
     try {
-      const response = await registrationAPI.createRegistration({
-        ...formData,
+      let response;
+      const registrationData = {
+        country: formData.country,
+        sku: formData.sku,
+        registration_number: formData.registration_number,
+        registration_status: formData.registration_status,
         registration_issue_date: formData.registration_issue_date || null,
         registration_expiry_date: formData.registration_expiry_date || null,
-      });
-      console.log('Registration created successfully:', response.data); // Log success response
+        remarks: formData.remarks,
+      };
+
+      if (formData.id) {
+        // Update existing registration
+        response = await registrationAPI.updateRegistration(formData.id, registrationData);
+        console.log('Registration updated successfully:', response.data);
+      } else {
+        // Create new registration
+        response = await registrationAPI.createRegistration(registrationData);
+        console.log('Registration created successfully:', response.data);
+      }
+
       setShowModal(false);
       resetForm();
-      setIsRegistrationAutoFilled(false);
       fetchData();
     } catch (error: any) {
       console.error('Error creating registration:', error); // Log error response
@@ -150,7 +190,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="dashboard-container">
+    <div className="main-container">
       <Header user={user} onLogout={onLogout} />
 
       <div className="panel">
@@ -174,6 +214,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                 <th>Issue Date</th>
                 <th>Expiry Date</th>
                 <th>Certificate</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -214,6 +255,15 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                     )}
                   </td>
                   <td>{reg.certificate_path ? '✓' : '✗'}</td>
+                  <td>
+                    <button
+                      className="nav-button"
+                      style={{ padding: '4px 10px', fontSize: '0.85em' }}
+                      onClick={() => handleEdit(reg)}
+                    >
+                      ✏️ Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -284,6 +334,18 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                 <span className="mobile-card-label">Certificate</span>
                 <span className="mobile-card-value">{reg.certificate_path ? '✓ Available' : '✗ Not Available'}</span>
               </div>
+              <div className="mobile-card-row" style={{ marginTop: '10px' }}>
+                <span className="mobile-card-label">Action</span>
+                <span className="mobile-card-value">
+                  <button
+                    className="nav-button"
+                    style={{ padding: '4px 12px', fontSize: '0.85em' }}
+                    onClick={() => handleEdit(reg)}
+                  >
+                    ✏️ Edit
+                  </button>
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -324,7 +386,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
         <div className="modal-overlay" onClick={() => { setShowModal(false); resetForm(); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <>
-              <h2>Add New Registration</h2>
+              <h2>{formData.id ? 'Edit Registration' : 'Add New Registration'}</h2>
               <form onSubmit={handleSubmit}>
 
               {/* ── Inline Error Banner ── */}
@@ -353,6 +415,8 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                   value={formData.country}
                   onChange={handleCountryChange}
                   required
+                  disabled={!!formData.id}
+                  style={formData.id ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.8 } : {}}
                 >
                   <option value="">— Select Country —</option>
                   {countries.map((country) => (
@@ -370,29 +434,29 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                     const sku = e.target.value;
                     setFormData(prev => ({ ...prev, sku }));
                     setFormError('');
-                    setIsRegistrationAutoFilled(false); // Reset auto-fill status on SKU change
 
                     if (formData.country && sku) {
                       try {
                         const selectedCountryObj = countries.find(c => c.name === formData.country);
                         const countryId = selectedCountryObj ? selectedCountryObj.id : formData.country;
                         const response = await registrationAPI.getRegistrationByCountryAndSku(countryId, sku);
-                        if (response.data && Object.keys(response.data).length > 0) {
+                        if (response.data && response.data.id) {
                           const registration = response.data;
                           setFormData(prev => ({
                             ...prev,
+                            id: registration.id, // Store the ID of the existing registration
                             registration_number: registration.registration_number || '',
                             registration_status: registration.registration_status || 'Active',
                             registration_issue_date: registration.registration_issue_date ? new Date(registration.registration_issue_date).toISOString().split('T')[0] : '',
                             registration_expiry_date: registration.registration_expiry_date ? new Date(registration.registration_expiry_date).toISOString().split('T')[0] : '',
                             remarks: registration.remarks || '',
                           }));
-                          setIsRegistrationAutoFilled(true);
                           setFormError('This product is already registered in this country. You can update the existing registration by modifying the fields.');
                         } else {
                           // No registration found, clear registration-specific fields
                           setFormData(prev => ({
                             ...prev,
+                            id: null, // Explicitly reset ID
                             registration_number: '',
                             registration_status: 'Active',
                             registration_issue_date: '',
@@ -414,8 +478,8 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                     }
                   }}
                   required
-                  disabled={!formData.country}
-                  style={{ opacity: !formData.country || isRegistrationAutoFilled ? 0.5 : 1 }}
+                  disabled={!formData.country || !!formData.id}
+                  style={formData.id ? { background: '#f1f5f9', cursor: 'not-allowed', opacity: 0.8 } : {}}
                 >
                   <option value="">— Select SKU —</option>
                   {filteredSkus.map((product) => (
@@ -440,8 +504,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                   onChange={(e) => { setFormData({ ...formData, registration_number: e.target.value }); setFormError(''); }}
                   required
                   placeholder="e.g. REG-2024-001"
-                  readOnly={isRegistrationAutoFilled}
-                  style={{ opacity: isRegistrationAutoFilled ? 0.7 : 1 }}
+
                 />
               </div>
 
@@ -450,8 +513,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                 <select
                   value={formData.registration_status}
                   onChange={(e) => setFormData({ ...formData, registration_status: e.target.value })}
-                  disabled={isRegistrationAutoFilled}
-                  style={{ opacity: isRegistrationAutoFilled ? 0.7 : 1 }}
+
                 >
                   <option value="Active">Active</option>
                   <option value="Expired">Expired</option>
@@ -465,8 +527,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                   type="date"
                   value={formData.registration_issue_date}
                   onChange={(e) => setFormData({ ...formData, registration_issue_date: e.target.value })}
-                  readOnly={isRegistrationAutoFilled}
-                  style={{ opacity: isRegistrationAutoFilled ? 0.7 : 1 }}
+
                 />
               </div>
 
@@ -476,8 +537,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                   type="date"
                   value={formData.registration_expiry_date}
                   onChange={(e) => setFormData({ ...formData, registration_expiry_date: e.target.value })}
-                  readOnly={isRegistrationAutoFilled}
-                  style={{ opacity: isRegistrationAutoFilled ? 0.7 : 1 }}
+
                 />
               </div>
 
@@ -487,14 +547,13 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                   value={formData.remarks}
                   onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                   rows={3}
-                  readOnly={isRegistrationAutoFilled}
-                  style={{ opacity: isRegistrationAutoFilled ? 0.7 : 1 }}
+
                 />
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <button type="submit" className="submit-button" disabled={submitting || isRegistrationAutoFilled}>
-                  {submitting ? 'Saving…' : 'Submit'}
+                <button type="submit" className="submit-button" disabled={submitting}>
+                  {submitting ? 'Saving…' : (formData.id ? 'Update' : 'Submit')}
                 </button>
                 <button
                   type="button"

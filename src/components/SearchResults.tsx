@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { searchAPI } from '../services/api';
-import { SearchSuggestion } from '../shared-types';
+import { FullSearchResultItem } from '../shared-types';
 
 interface SearchResultsProps {
   // Define any props if needed
@@ -11,7 +11,7 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [results, setResults] = useState<SearchSuggestion[]>([]);
+  const [results, setResults] = useState<FullSearchResultItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,10 +24,10 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
       setSearchQuery(query);
       setLoading(true);
       setError(null);
-      searchAPI.getSuggestions(query)
+      searchAPI.fullSearch(query) // Use the new fullSearch API
         .then(response => {
-          setResults(response.data.suggestions);
-          console.log("Debug: API success - suggestions:", response.data.suggestions);
+          setResults(response.data.results); // Access .results from FullSearchResponse
+          console.log("Debug: API success - full results:", response.data.results);
         })
         .catch(err => {
           console.error("Error fetching search results:", err);
@@ -45,22 +45,9 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
     }
   }, [location.search]);
 
-  const handleResultClick = (result: SearchSuggestion) => {
-    switch (result.type) {
-      case 'product':
-        navigate(`/products/${result.id}`);
-        break;
-      case 'customer':
-        navigate(`/customers/${result.id}`);
-        break;
-      case 'order':
-        navigate(`/orders/${result.id}`);
-        break;
-      default:
-        console.warn(`Unknown search result type: ${result.type}`);
-        // Optionally navigate to a generic detail page or just do nothing
-        break;
-    }
+  const handleResultClick = (result: FullSearchResultItem) => {
+    // Use the link directly from the FullSearchResultItem
+    navigate(result.link);
   };
 
   return (
@@ -68,7 +55,6 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
       <h2>Search Results for "{searchQuery}"</h2>
       {loading && <p>Loading results...</p>}
       {error && <p className="error-message">{error}</p>}
-      console.log("Debug: Final state - loading:", loading, "error:", !!error, "results.length:", results.length, "searchQuery:", searchQuery);
       {!loading && !error && results.length === 0 && searchQuery && (
         <p>No results found for "{searchQuery}".</p>
       )}
@@ -78,6 +64,7 @@ const SearchResults: React.FC<SearchResultsProps> = () => {
             <div key={index} className="result-item" onClick={() => handleResultClick(result)}>
               <h3>{result.name}</h3>
               <p>Type: {result.type}</p>
+              {result.description && <p>{result.description}</p>}
             </div>
           ))}
         </div>

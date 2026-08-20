@@ -1,7 +1,7 @@
 import axios from 'axios';
-import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse } from "../shared-types";
+import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse, FullSearchResultItem, FullSearchResponse } from "../shared-types";
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = 'https://eoct-backend.onrender.com/api';
 
 //https://eoct-backend.onrender.com
 
@@ -64,18 +64,34 @@ export const orderAPI = {
   canApproveOrder: (id: number) => api.get(`/orders/${id}/can-approve`),
   updateMilestone: (milestoneId: number, data: any) =>
     api.put(`/milestones/${milestoneId}`, data),
-  setBulkTargetDates: (orderId: number, milestones: Array<{ milestone_id: number; target_date: string | null }>) =>
-    api.post(`/orders/${orderId}/milestones/target-dates`, { milestones }),
+  setBulkTargetDates: (orderId: number, milestones: any[]) =>
+  api.put(`/orders/${orderId}/milestones/bulk-target-dates`, { milestones }),
   getMilestoneHistory: (milestoneId: number) => api.get(`/milestones/${milestoneId}/history`),
 };
 
 // Product APIs
 export const productAPI = {
   getProducts: (skip: number = 0, limit: number = 20, scmUserType?: string) => api.get('/products', { params: { skip, limit, scm_user_type: scmUserType } }),
+  getProductDetail: (id: number) => api.get(`/products/detail/${id}`),
   getProductsByCountry: (countryName: string) => api.get<ProductSearchItem[]>(`/skus/${countryName}`),
   createProduct: (data: any) => api.post('/products', data),
   getProductBySku: (sku: string) => api.get(`/products/sku/${sku}`), // New endpoint for fetching by SKU
-  updateProduct: (id: number, data: any) => api.put(`/products/${id}`, data), // New endpoint for updating product
+  updateProduct: (id: number, data: {
+    product_name?: string;
+    country_id?: number;
+    customer?: string;
+    pack_size?: string;
+    standard_batch_size?: number;
+    moq?: number;
+    primary_pm_code?: string;
+    secondary_pm_code?: string;
+    leaf_pm_code?: string;
+    current_artwork_version?: string;
+    artwork_status?: string;
+    is_active?: boolean;
+    category?: string;
+    price?: number;
+  }) => api.put(`/products/${id}`, data),
   getProductsFiltered: (country?: string, customerId?: string) => {
     const params: any = {};
     if (country) params.country = country;
@@ -87,13 +103,11 @@ export const productAPI = {
   requestPmCode: (sku: string) => api.post(`/products/${sku}/pm-requests`),
   decidePmCode: (requestId: number, decision: 'ACCEPT' | 'REJECT', remarks?: string, primaryPmCode?: string, secondaryPmCode?: string, leafPmCode?: string, artworkStatus?: string) => api.post(`/products/pm-requests/${requestId}/decide`, { decision, remarks, primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, artwork_status: artworkStatus }),
   submitArtworkPmCode: (requestId: number, primaryPmCode: string, secondaryPmCode: string, leafPmCode: string, remarks?: string) => api.post(`/products/pm-requests/${requestId}/submit-artwork`, { primary_pm_code: primaryPmCode, secondary_pm_code: secondaryPmCode, leaf_pm_code: leafPmCode, remarks }),
-  getCategories: () => api.get('/categories'),
   getCountries: () => api.get<Country[]>('/countries'),
   searchProducts: (query: string) => api.get<ProductSearchResponse>(`/products/search`, { params: { query } }),
   getLastSku: () => api.get(`/products/last-sku`),
-  checkDuplicate: (category: string, country_id: number, customer: string, pack_size: string) => 
-    api.get(`/products/check-duplicate`, { params: { category, country_id, customer, pack_size } }),
-};
+  checkDuplicate: (country_id: number, customer: string, pack_size: string) => 
+    api.get(`/products/check-duplicate`, { params: { country_id, customer, pack_size } }),};
 
 
 export const customerAPI = {
@@ -101,7 +115,6 @@ export const customerAPI = {
     country?: string,
     productSku?: string,
     productName?: string,
-    productCategory?: string,
     skip: number = 0,
     limit: number = 20
   ) => {
@@ -109,7 +122,6 @@ export const customerAPI = {
     if (country) params.country = country;
     if (productSku) params.product_sku = productSku;
     if (productName) params.product_name = productName;
-    if (productCategory) params.product_category = productCategory;
     return api.get<Customer[]>('/customers', { params });
   },
   getCustomersByCountry: (countryId: number) => api.get<Customer[]>(`/customers/by-country/${countryId}`),
@@ -126,6 +138,7 @@ export const registrationAPI = {
   getRegistrationsBySku: (sku: string) => api.get('/registrations/by-sku', { params: { sku } }),
   getRegistrationByCountryAndSku: (countryId: number | string, sku: string) => api.get('/registrations/by-country-sku', { params: { country_id: countryId, sku } }),
   createRegistration: (data: any) => api.post('/registrations', data),
+  updateRegistration: (id: number, data: any) => api.put(`/registrations/${id}`, data),
   uploadCertificate: (id: number, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -149,6 +162,7 @@ export const auditAPI = {
 // Search APIs
 export const searchAPI = {
   getSuggestions: (query: string) => api.get<SearchSuggestionsResponse>('/search/suggestions', { params: { query } }),
+  fullSearch: (query: string) => api.get<FullSearchResponse>('/search/full', { params: { query } }),
 };
 
 export const formatErrorMessage = (err: any, fallback: string = 'An error occurred'): string => {
