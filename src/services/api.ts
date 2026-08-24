@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse, FullSearchResultItem, FullSearchResponse } from "../shared-types";
+import { IOrderCreate } from "../types";
 
-const API_URL = 'https://eoct-backend.onrender.com/api';
+const API_URL = 'http://localhost:8000/api';
 
 //https://eoct-backend.onrender.com
 
@@ -58,14 +59,14 @@ export const dashboardAPI = {
 export const orderAPI = {
   getOrders: (status?: string, productType?: string, skip: number = 0, limit: number = 20) => api.get('/orders', { params: { status, product_type: productType, skip, limit } }),
   getOrder: (id: number) => api.get(`/orders/${id}`),
-  createOrder: (data: any) => api.post('/orders', data),
+  createOrder: (data: IOrderCreate) => api.post('/orders', data),
   updateOrder: (id: number, data: any) => api.put(`/orders/${id}`, data),
   approveOrder: (id: number, data: any) => api.put(`/orders/${id}/approve`, data),
   canApproveOrder: (id: number) => api.get(`/orders/${id}/can-approve`),
   updateMilestone: (milestoneId: number, data: any) =>
     api.put(`/milestones/${milestoneId}`, data),
   setBulkTargetDates: (orderId: number, milestones: any[]) =>
-  api.put(`/orders/${orderId}/milestones/bulk-target-dates`, { milestones }),
+    api.put(`/orders/${orderId}/milestones/bulk-target-dates`, { milestones }),
   getMilestoneHistory: (milestoneId: number) => api.get(`/milestones/${milestoneId}/history`),
 };
 
@@ -106,8 +107,9 @@ export const productAPI = {
   getCountries: () => api.get<Country[]>('/countries'),
   searchProducts: (query: string) => api.get<ProductSearchResponse>(`/products/search`, { params: { query } }),
   getLastSku: () => api.get(`/products/last-sku`),
-  checkDuplicate: (country_id: number, customer: string, pack_size: string) => 
-    api.get(`/products/check-duplicate`, { params: { country_id, customer, pack_size } }),};
+  checkDuplicate: (country_id: number, customer: string, pack_size: string) =>
+    api.get(`/products/check-duplicate`, { params: { country_id, customer, pack_size } }),
+};
 
 
 export const customerAPI = {

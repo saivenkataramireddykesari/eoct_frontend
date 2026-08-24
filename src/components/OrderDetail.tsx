@@ -94,6 +94,18 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     return isNaN(d.getTime()) ? dateString : d.toLocaleDateString();
   };
 
+  const getCurrencySymbol = (currencyCode: string): string => {
+    switch (currencyCode) {
+      case 'INR': return '₹';
+      case 'USD': return '$';
+      case 'EUR': return '€';
+      case 'RUB': return '₽';
+      case 'GBP': return '£';
+      case 'AED': return 'د.إ';
+      default: return currencyCode; // Fallback to code if symbol not found
+    }
+  };
+
   const REQUIRED_TARGET_MILESTONES = [
     'PO Released',
     'PM Received',
@@ -606,6 +618,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             <p><strong>Country:</strong> {order.country?.name || "-"}</p>
             <p><strong>PO Number:</strong> {order.po_number}</p>
             <p><strong>PO Date:</strong> {new Date(order.po_date).toLocaleDateString()}</p>
+            <p><strong>Order Price:</strong> {getCurrencySymbol(order.currency)} {order.order_price ? order.order_price.toFixed(2) : 'N/A'}</p>
           </div>
 
           <div className="form-section">

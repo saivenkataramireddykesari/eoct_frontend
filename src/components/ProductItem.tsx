@@ -21,8 +21,8 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMa
   const totalPrice = totalQuantity * (parseFloat(product.price) || 0);
 
   useEffect(() => {
-    const fetchProductDetails = async () => {
-      if (product.skuCode) {
+    if (product.skuCode) {
+      const fetchProductDetails = async () => {
         try {
           const response = await productAPI.getProductBySku(product.skuCode);
           const fetchedProduct: Product = response.data;
@@ -40,25 +40,25 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMa
           });
         } catch (error) {
           console.error("Error fetching product details by SKU:", error);
-          // Optionally, show an error message to the user or clear fields
           onUpdateMany(product.id, {
             productName: '', category: '', packSize: '',
             batchSize: '', moq: '', artworkStatus: 'Not Available', primaryPmCode: '', secondaryPmCode: '', leafPmCode: '',
             price: '', totalPrice: 0,
           });
         }
-      } else {
-        // Clear fields if SKU is cleared
-        onUpdateMany(product.id, {
-          productName: '', category: '', packSize: '',
-          batchSize: '', moq: '', artworkStatus: 'Not Available', primaryPmCode: '', secondaryPmCode: '', leafPmCode: '',
-          price: '', totalPrice: 0,
-        });
-      }
-    };
+      };
 
-    fetchProductDetails();
-  }, [product.skuCode]); // Trigger when SKU code changes
+      fetchProductDetails();
+
+    } else {
+      // Clear fields if SKU is cleared (and not unregistered product)
+      onUpdateMany(product.id, {
+        productName: '', category: '', packSize: '',
+        batchSize: '', moq: '', artworkStatus: 'Not Available', primaryPmCode: '', secondaryPmCode: '', leafPmCode: '',
+        price: '', totalPrice: 0,
+      });
+    }
+  }, [product.skuCode]); // Trigger when SKU code or unregistered status changes
 
 
 
@@ -105,63 +105,63 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMa
         </button>
       </div>
       <div style={grid2}>
-        <div style={fld}>
-          <label style={lbl}>SKU Code *</label>
-          <select value={product.skuCode} onChange={e => onUpdate(product.id, 'skuCode', e.target.value)} required
-            style={availableSkus.length > 0 ? inp : inpDis} disabled={availableSkus.length === 0}>
-            <option value="">{availableSkus.length > 0 ? '— Select SKU —' : 'No products available'}</option>
-            {availableSkus.map((p: any) => (
-              <option key={p.sku_code} value={p.sku_code}>{`${p.sku_code} - ${p.product_name}`}</option>
-            ))}
-          </select>
-        </div>
-        <div style={fld}>
-          <label style={lbl}>Product Name *</label>
-          <input type="text" value={product.productName} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
-        </div>
-        <div style={fld}>
-          <label style={lbl}>Manufacturing Unit</label>
-          <input type="text" value={product.category} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
-        </div>
-        <div style={fld}>
-          <label style={lbl}>Pack Size</label>
-          <input type="text" value={product.packSize} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
-        </div>
-        <div style={fld}>
-          <label style={lbl}>Standard Batch Size</label>
-          <input type="number" value={product.batchSize} readOnly style={inpDis} placeholder="Auto-filled from SKU" min="0" />
-        </div>
-        <div style={fld}>
-          <label style={lbl}>MOQ</label>
-          <input type="number" value={product.moq} readOnly style={inpDis} placeholder="Auto-filled from SKU" min="0" />
-        </div>
-        <div style={fld}>
-          {/* <label style={lbl}>Artwork Status *</label>
-          <select value={product.artworkStatus} onChange={e => onUpdate(product.id, 'artworkStatus', e.target.value)} style={inp}>
-            <option value="Not Available">Not Available</option>
-            <option value="Pending">Pending</option>
-            <option value="Available">Available</option>
-          </select> */}
-        </div>
-        {product.artworkStatus === 'Available' && (
-          <>
             <div style={fld}>
-              <label style={lbl}>Primary PM Code *</label>
-              <input type="text" value={product.primaryPmCode} onChange={e => onUpdate(product.id, 'primaryPmCode', e.target.value)}
-                required style={inp} placeholder="e.g. PM-PARA-500" />
+              <label style={lbl}>SKU Code *</label>
+              <select value={product.skuCode} onChange={e => onUpdate(product.id, 'skuCode', e.target.value)} required
+                style={availableSkus.length > 0 ? inp : inpDis} disabled={availableSkus.length === 0}>
+                <option value="">{availableSkus.length > 0 ? '— Select SKU —' : 'No products available'}</option>
+                {availableSkus.map((p: any) => (
+                  <option key={p.sku_code} value={p.sku_code}>{`${p.sku_code} - ${p.product_name}`}</option>
+                ))}
+              </select>
             </div>
             <div style={fld}>
-              <label style={lbl}>Secondary PM Code</label>
-              <input type="text" value={product.secondaryPmCode} onChange={e => onUpdate(product.id, 'secondaryPmCode', e.target.value)}
-                style={inp} placeholder="Optional Secondary PM Code" />
+              <label style={lbl}>Product Name *</label>
+              <input type="text" value={product.productName} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
             </div>
             <div style={fld}>
-              <label style={lbl}>Leaf PM Code</label>
-              <input type="text" value={product.leafPmCode} onChange={e => onUpdate(product.id, 'leafPmCode', e.target.value)}
-                style={inp} placeholder="Optional Leaf PM Code" />
+              <label style={lbl}>Manufacturing Unit</label>
+              <input type="text" value={product.category} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
             </div>
-          </>
-        )}
+            <div style={fld}>
+              <label style={lbl}>Pack Size</label>
+              <input type="text" value={product.packSize} readOnly style={inpDis} placeholder="Auto-filled from SKU" />
+            </div>
+            <div style={fld}>
+              <label style={lbl}>Standard Batch Size</label>
+              <input type="number" value={product.batchSize} readOnly style={inpDis} placeholder="Auto-filled from SKU" min="0" />
+            </div>
+            <div style={fld}>
+              <label style={lbl}>MOQ</label>
+              <input type="number" value={product.moq} readOnly style={inpDis} placeholder="Auto-filled from SKU" min="0" />
+            </div>
+            <div style={fld}>
+              {/* <label style={lbl}>Artwork Status *</label>
+              <select value={product.artworkStatus} onChange={e => onUpdate(product.id, 'artworkStatus', e.target.value)} style={inp}>
+                <option value="Not Available">Not Available</option>
+                <option value="Pending">Pending</option>
+                <option value="Available">Available</option>
+              </select> */}
+            </div>
+            {product.artworkStatus === 'Available' && (
+              <>
+                <div style={fld}>
+                  <label style={lbl}>Primary PM Code *</label>
+                  <input type="text" value={product.primaryPmCode} onChange={e => onUpdate(product.id, 'primaryPmCode', e.target.value)}
+                    required style={inp} placeholder="e.g. PM-PARA-500" />
+                </div>
+                <div style={fld}>
+                  <label style={lbl}>Secondary PM Code</label>
+                  <input type="text" value={product.secondaryPmCode} onChange={e => onUpdate(product.id, 'secondaryPmCode', e.target.value)}
+                    style={inp} placeholder="Optional Secondary PM Code" />
+                </div>
+                <div style={fld}>
+                  <label style={lbl}>Leaf PM Code</label>
+                  <input type="text" value={product.leafPmCode} onChange={e => onUpdate(product.id, 'leafPmCode', e.target.value)}
+                    style={inp} placeholder="Optional Leaf PM Code" />
+                </div>
+              </>
+            )}
       </div>
 
       {/* ── Quantity ── */}

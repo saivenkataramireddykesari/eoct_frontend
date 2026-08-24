@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { orderAPI, customerAPI, productAPI, formatErrorMessage } from '../services/api';
 import { Customer } from '../shared-types';
+import { IOrderCreate } from '../types'; // Import IOrderCreate
 import Header from './Header';
 import ProductItem from './ProductItem';
 
@@ -72,7 +73,8 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
   /* ── Products State (multiple) ── */
   interface OrderProduct {
     id: string;
-    skuCode: string;
+    skuCode?: string; // Made optional
+
     productName: string;
     category: string;
     packSize: string;
@@ -84,7 +86,7 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     leafPmCode: string;
     salesQty: string;
     freeQty: string;
-    price: string;
+    price: string; // This might be the client-provided price for unregistered products
     currency: string;
     totalPrice: number; // Calculated field
   }
@@ -297,11 +299,33 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     if (!customerId && !isAddingNewCustomer) { setError('Please select an existing customer or add a new one.'); return; }
 
     // Validate each product
-    for (const product of products) {
-      if (!product.skuCode.trim()) { setError('SKU Code is required for all products'); return; }
-      const productTotalQty = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);
-      if (productTotalQty <= 0) { setError(`Total quantity must be greater than 0 for product ${product.skuCode}`); return; }
-    }
+for (const product of products) {
+  if (!product.skuCode?.trim()) {
+    setError('SKU Code is required for all products.');
+    return;
+  }
+
+  const productTotalQty =
+    (parseInt(product.salesQty) || 0) +
+    (parseInt(product.freeQty) || 0);
+
+  if (productTotalQty <= 0) {
+    setError(
+      `Total quantity must be greater than 0 for product ${product.skuCode}`
+    );
+    return;
+  }
+
+  // PRICE VALIDATION
+  const productPrice = parseFloat(product.price);
+
+  if (!product.price || isNaN(productPrice) || productPrice <= 0) {
+    setError(
+      `Product price is required for ${product.skuCode}. Please enter a valid price.`
+    );
+    return;
+  }
+}
 
     // Calculate total quantity across all products for a general check, if needed
     const overallTotalQty = products.reduce((sum, product) => sum + ((parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0)), 0);
@@ -369,25 +393,30 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
 
         console.log("Full product data being sent:", product);
 
-        const res = await orderAPI.createOrder({
+        const orderData: IOrderCreate = {
           country_id: countryIdToSend,
           customer_id: parseInt(currentCustomerId),
-          sku: product.skuCode,
           po_number: poNumber,
           po_date: poDate || null,
-          requested_delivery_date: requestedDate || null,
-          shipping_terms: shippingTerms || null,
+
           sales_quantity: parseInt(product.salesQty) || 0,
           free_quantity: parseInt(product.freeQty) || 0,
           quantity: productTotalQty,
-          price: parseFloat(product.price) || 0,
-          currency: product.currency,
-          total_price: product.totalPrice,
+
+          requested_delivery_date: requestedDate || null,
+          shipping_terms: shippingTerms || null,
           import_license_required: importLicRequired === 'Yes',
           import_license_validity: importLicValidity || null,
           remarks: remarks || null,
-          order_type: product.category === 'PP' ? 'PP' : 'PNS',
-        });
+
+          // IMPORTANT
+          currency: product.currency,
+          order_price: parseFloat(product.price),
+
+          order_type: orderType,
+          sku: product.skuCode,
+        };
+        const res = await orderAPI.createOrder(orderData);
         createdOrderNumbers.push(res.data.order_number);
       }
       setSuccess(`✅ Orders created successfully! Order No(s): ${createdOrderNumbers.join(', ')}`);

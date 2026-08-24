@@ -8,6 +8,27 @@ export interface IMilestone {
   category?: string; // Optional, as it's added in getUniqueMilestones
 }
 
+export interface IOrderCreate {
+  customer_id: number;
+  country_id: number;
+  po_number: string;
+  po_date: string | null;
+  sku?: string | null; // Make optional
+  unregistered_product_name?: string | null; // New field
+  unregistered_product_description?: string | null; // New field
+  sales_quantity: number;
+  free_quantity: number;
+  quantity: number;
+  requested_delivery_date: string | null;
+  shipping_terms?: string | null;
+  import_license_required?: boolean;
+  import_license_validity?: string | null;
+  remarks?: string | null;
+  order_type: string;
+  currency: string;
+  order_price?: number; // Make optional for unregistered products
+}
+
 export interface IOrder {
   id: number;
   order_id: number;
@@ -16,7 +37,9 @@ export interface IOrder {
   country: { name: string };
   po_number: string;
   po_date: string;
-  sku: string;
+  sku: string | null; // Make optional
+  unregistered_product_name?: string | null; // New field
+  unregistered_product_description?: string | null; // New field
   product: {
     product_name: string;
     pack_size: string;
@@ -26,7 +49,7 @@ export interface IOrder {
     secondary_pm_code: string;
     leaf_pm_code: string;
     artwork_status: string;
-  };
+  } | null; // Allow product to be null
   quantity: number;
   requested_delivery_date: string;
   shipping_terms: string;
@@ -38,6 +61,8 @@ export interface IOrder {
   approvals: IApproval[];
   milestones: IMilestone[];
   created_at: string;
+  order_price: number;
+  currency: string;
 }
 
 export interface IApproval {
