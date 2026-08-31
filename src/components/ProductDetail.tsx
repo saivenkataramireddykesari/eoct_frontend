@@ -84,7 +84,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ user, onLogout }) => {
     try {
       await productAPI.updatePmCode(product.sku_code, primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
       setPmModal(false);
-      alert('PM Code updated successfully!');
+      setPrimaryPmCodeInput('');
+      setSecondaryPmCodeInput('');
+      setLeafPmCodeInput('');
+      alert('PM Code submitted for Regulatory team approval!');
       fetchProductDetails(product.id);
     } catch (err: any) {
       alert(formatErrorMessage(err, 'Error updating PM Code'));
@@ -239,6 +242,12 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ user, onLogout }) => {
               </>
             )}
 
+            {isArtwork && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
+              <span style={{ color: '#0284c7', fontSize: '0.9rem', fontWeight: 600, padding: '6px 12px', background: '#e0f2fe', borderRadius: '6px' }}>
+                Awaiting Regulatory Approval
+              </span>
+            )}
+
             {isArtwork && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
               <button
                 className="submit-button"
@@ -254,7 +263,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ user, onLogout }) => {
               </button>
             )}
 
-            {isArtwork && (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') && (
+            {isArtwork && (!latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL')) && (
               <button
                 className="submit-button"
                 style={{ background: '#f59e0b', borderColor: '#f59e0b' }}

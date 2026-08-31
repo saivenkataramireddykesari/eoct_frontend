@@ -280,6 +280,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       await productAPI.updatePmCode(pmModal.sku, primaryPmCodeInput, secondaryPmCodeInput, leafPmCodeInput);
       setPmModal(null);
       setPrimaryPmCodeInput('');
+      setSecondaryPmCodeInput('');
+      setLeafPmCodeInput('');
+      alert('PM Code submitted for Regulatory team approval!');
       fetchProducts();
     } catch (error: any) {
       alert(error.response?.data?.detail || 'Error updating PM Code');
@@ -490,12 +493,15 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                           </button>
                         </div>
                       )}
+                      {user.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
+                        <span style={{ color: '#0284c7', fontSize: '0.85em', fontWeight: 600 }}>Awaiting Regulatory Approval</span>
+                      )}
                       {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
                         <button
                           className="submit-button"
                           style={{ background: '#ff9800', borderColor: '#ff9800' }}
                           onClick={() => {
-                            setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku });
+                            setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
                             setPrimaryPmCodeInput(latestRequest.current_primary_pm_code || product.primary_pm_code || '');
                             setSecondaryPmCodeInput(latestRequest.current_secondary_pm_code || product.secondary_pm_code || '');
                             setLeafPmCodeInput(latestRequest.current_leaf_pm_code || product.leaf_pm_code || '');
@@ -504,7 +510,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                           Submit PM Code
                         </button>
                       )}
-                      {user.department === 'Artwork' && (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') && (
+                      {user.department === 'Artwork' && (!latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL')) && (
                         <button
                           className="submit-button"
                           style={{ background: '#ff9800', borderColor: '#ff9800' }}
@@ -664,12 +670,15 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       </button>
                     </div>
                   )}
+                  {user.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
+                    <span style={{ color: '#0284c7', fontSize: '0.85em', fontWeight: 600, textAlign: 'center', width: '100%' }}>Awaiting Regulatory Approval</span>
+                  )}
                   {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
                     <button
                       className="submit-button"
                       style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
                       onClick={() => {
-                        setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku });
+                        setArtworkSubmitModal({ requestId: latestRequest.id, sku: product.sku_code });
                         setPrimaryPmCodeInput(latestRequest.current_primary_pm_code || product.primary_pm_code || '');
                         setSecondaryPmCodeInput(latestRequest.current_secondary_pm_code || product.secondary_pm_code || '');
                         setLeafPmCodeInput(latestRequest.current_leaf_pm_code || product.leaf_pm_code || '');
@@ -678,7 +687,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       Submit PM Code
                     </button>
                   )}
-                  {user.department === 'Artwork' && (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') && (
+                  {user.department === 'Artwork' && (!latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL')) && (
                     <button
                       className="submit-button"
                       style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}

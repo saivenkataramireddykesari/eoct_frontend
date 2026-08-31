@@ -167,11 +167,10 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Order ID</th>
                 <th>Order Number</th>
                 <th>Customer</th>
                 <th>Country</th>
-                <th>SKU</th>
+                <th>Product Name</th>
                 <th>Manufacturing Unit</th>
                 <th>Quantity</th>
                 <th>Delivery Date</th>
@@ -188,11 +187,10 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   onClick={() => navigate(`/orders/${order.id}`)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td>{order.order_id}</td>
                   <td>{order.order_number}</td>
                   <td>{order.customer?.customer_name}</td>
                   <td>{order.country?.name || "-"}</td>
-                  <td>{order.sku}</td>
+                  <td>{order.product?.product_name || order.product_name || "-"}</td>
                   <td>{order.product?.category || "-"}</td>
                   <td>{order.quantity}</td>
                   <td>{formatDate(order.requested_delivery_date)}</td>
@@ -228,10 +226,6 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               style={{ cursor: 'pointer' }}
             >
               <div className="mobile-card-row">
-                <span className="mobile-card-label">Order ID</span>
-                <span className="mobile-card-value">{order.order_id}</span>
-              </div>
-              <div className="mobile-card-row">
                 <span className="mobile-card-label">Order Number</span>
                 <span className="mobile-card-value">{order.order_number}</span>
               </div>
@@ -244,8 +238,8 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                 <span className="mobile-card-value">{order.country?.name || "-"}</span>
               </div>
               <div className="mobile-card-row">
-                <span className="mobile-card-label">SKU</span>
-                <span className="mobile-card-value">{order.sku}</span>
+                <span className="mobile-card-label">Product Name</span>
+                <span className="mobile-card-value">{order.product?.product_name || order.product_name || "-"}</span>
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Category</span>
