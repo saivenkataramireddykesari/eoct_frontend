@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { customerAPI, formatErrorMessage } from '../services/api';
 import { Customer } from '../shared-types';
 import Header from './Header';
+import { formatDate } from '../utils/dateUtils';
 
 interface CustomerDetailProps {
   user: any;
@@ -103,7 +104,7 @@ const CustomerDetail: React.FC<CustomerDetailProps> = ({ user, onLogout }) => {
           </div>
           <div className="detail-item">
             <strong>Agreement Validity:</strong>
-            <span>{customer.agreement_validity ? new Date(customer.agreement_validity).toLocaleDateString() : 'N/A'}</span>
+            <span>{formatDate(customer.agreement_validity)}</span>
           </div>
           {/* Add more customer details as needed */}
         </div>

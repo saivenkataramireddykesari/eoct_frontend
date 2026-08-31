@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { alertAPI } from '../services/api';
 import Header from './Header';
+import { formatDateTime } from '../utils/dateUtils';
 
 interface AlertsProps {
   user: any;
@@ -150,7 +151,7 @@ const Alerts: React.FC<AlertsProps> = ({ user, onLogout, refreshAlerts }) => {
                       </p>
                     )}
                     <small style={{ display: 'block', marginTop: '10px' }}>
-                      {new Date(alert.created_at).toLocaleString()}
+                      {formatDateTime(alert.created_at)}
                     </small>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}>

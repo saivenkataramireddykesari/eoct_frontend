@@ -18,8 +18,9 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMa
 
 
   const totalQuantity = (parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0);
-  const totalPrice = totalQuantity * (parseFloat(product.price) || 0);
-
+  const salesQuantity = parseFloat(product.salesQty) || 0;
+  const totalPrice = salesQuantity * (parseFloat(product.price) || 0);
+  
   useEffect(() => {
     if (product.skuCode) {
       const fetchProductDetails = async () => {
@@ -62,13 +63,14 @@ const ProductItem: React.FC<ProductItemProps> = ({ product, onUpdate, onUpdateMa
 
 
 
-  // Recalculate totalPrice whenever salesQty, freeQty, or price changes
+  // Recalculate totalPrice whenever salesQty or price changes
   useEffect(() => {
-    const newTotal = totalQuantity * (parseFloat(product.price) || 0);
+    const salesQtyNum = parseFloat(product.salesQty) || 0;
+    const newTotal = salesQtyNum * (parseFloat(product.price) || 0);
     if (newTotal !== product.totalPrice) {
       onUpdate(product.id, 'totalPrice', newTotal);
     }
-  }, [totalQuantity, product.price, onUpdate, product.id, product.totalPrice]); // Add product.price and totalQuantity to dependencies
+  }, [product.salesQty, product.price, onUpdate, product.id, product.totalPrice]); // Add product.price and totalQuantity to dependencies
 
   /* ── styles ── */
   const card: React.CSSProperties = {

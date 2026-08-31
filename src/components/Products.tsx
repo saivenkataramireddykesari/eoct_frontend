@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { productAPI, customerAPI } from '../services/api';
 import Header from './Header';
 import { Country, Customer } from '../shared-types';
+import { formatDateTime } from '../utils/dateUtils';
 
 interface ProductsProps {
   user: any;
@@ -1222,7 +1223,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                     .map((tx: any) => (
                       <tr key={tx.id}>
-                        <td>{new Date(tx.created_at).toLocaleString()}</td>
+                        <td>{formatDateTime(tx.created_at)}</td>
                         <td>
                           <span className={`status-badge ${tx.action_by_dept === 'Regulatory' ? 'status-new' : 'status-execution'}`}>
                             {tx.action_by_dept}

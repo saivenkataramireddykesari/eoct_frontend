@@ -48,6 +48,23 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
   const totalQuantity =
     (parseInt(formData.sales_quantity) || 0) + (parseInt(formData.free_quantity) || 0);
 
+  const getTodayStr = (): string => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getTomorrowStr = (): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const fmt = (d: string | null) => {
     if (!d) return '';
     try { return new Date(d).toISOString().split('T')[0]; } catch { return ''; }
@@ -139,6 +156,17 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (totalQuantity <= 0) { setError('Total quantity must be > 0'); return; }
+
+    const todayStr = getTodayStr();
+    if (formData.po_date && formData.po_date > todayStr) {
+      setError('PO Date can only be a past or current date.');
+      return;
+    }
+    if (formData.requested_delivery_date && formData.requested_delivery_date <= todayStr) {
+      setError('Order Delivery Date must be a future date.');
+      return;
+    }
+
     setLoading(true); setError(''); setSuccess('');
     try {
       const data = {
@@ -269,11 +297,11 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
               </div>
               <div style={group}>
                 <label style={lbl}>PO Date *</label>
-                <input type="date" name="po_date" value={formData.po_date} onChange={handleChange} required style={inp} />
+                <input type="date" name="po_date" value={formData.po_date} max={getTodayStr()} onChange={handleChange} required style={inp} />
               </div>
               <div style={group}>
                 <label style={lbl}>Requested Delivery Date *</label>
-                <input type="date" name="requested_delivery_date" value={formData.requested_delivery_date} onChange={handleChange} required style={inp} />
+                <input type="date" name="requested_delivery_date" value={formData.requested_delivery_date} min={getTomorrowStr()} onChange={handleChange} required style={inp} />
               </div>
               <div style={{ ...group, gridColumn: '1 / -1' }}>
                 <label style={lbl}>Shipping Terms</label>

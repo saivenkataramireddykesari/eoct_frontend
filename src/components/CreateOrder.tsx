@@ -6,7 +6,7 @@ import { IOrderCreate } from '../types'; // Import IOrderCreate
 import Header from './Header';
 import ProductItem from './ProductItem';
 
-const CURRENCIES = ['USD', 'EUR', 'INR', 'RUB','GBP','AED'];
+const CURRENCIES = ['USD', 'EUR', 'INR', 'RUB', 'GBP', 'AED'];
 
 
 interface CreateOrderProps {
@@ -14,12 +14,30 @@ interface CreateOrderProps {
   onLogout: () => void;
 }
 
+/* ── Helper Date Functions ── */
+const getTodayStr = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTomorrowStr = (): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 /* ── Generate PO Number: first3(country) + first3(customer) + MMYY from selected PO date + serial ── */
 const generatePoNumber = (country: string, customerName: string, poDateStr: string, orderCount: number = 0): string => {
-  const c  = country.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
-  const k  = customerName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
+  const c = country.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
+  const k = customerName.replace(/\s+/g, '').substring(0, 3).toUpperCase().padEnd(3, 'X');
   // Use selected PO date if available, otherwise today
-  const d  = poDateStr ? new Date(poDateStr) : new Date();
+  const d = poDateStr ? new Date(poDateStr) : new Date();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yy = String(d.getFullYear()).slice(-2);
   const serial = orderCount + 1;
@@ -37,36 +55,36 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     }
   }, [user, navigate]);
 
-  const [allCustomers, setAllCustomers]           = useState<any[]>([]);
+  const [allCustomers, setAllCustomers] = useState<any[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<any[]>([]);
-  const [countries, setCountries]                 = useState<string[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
 
   const [selectedCustomerOrderCount, setSelectedCustomerOrderCount] = useState(0);
-  const [loading, setLoading]                     = useState(false);
-  const [error, setError]                         = useState('');
-  const [success, setSuccess]                     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   // State for available SKUs to pass to ProductItem
   const [availableSkus, setAvailableSkus] = useState<{ sku_code: string; product_name: string }[]>([]);
 
 
   /* ── Order state ── */
-  const [country, setCountry]       = useState('');
+  const [country, setCountry] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [poNumber, setPoNumber]     = useState('');
-  const [poDate, setPoDate]         = useState('');
+  const [poNumber, setPoNumber] = useState('');
+  const [poDate, setPoDate] = useState('');
   const [requestedDate, setRequestedDate] = useState('');
   const [shippingTerms, setShippingTerms] = useState('');
-  const [orderType, setOrderType]   = useState('PNS');   // PNS or PP
+  const [orderType, setOrderType] = useState('PNS');   // PNS or PP
   const [orderCategory, setOrderCategory] = useState(''); // Drug, Nutra, Excipient
-  const [newCustomerName, setNewCustomerName]     = useState('');
+  const [newCustomerName, setNewCustomerName] = useState('');
   const [isAddingNewCustomer, setIsAddingNewCustomer] = useState(false);
-  const [salesQty, setSalesQty]     = useState('');
-  const [freeQty, setFreeQty]       = useState('');
+  const [salesQty, setSalesQty] = useState('');
+  const [freeQty, setFreeQty] = useState('');
   const [importLicRequired, setImportLicRequired] = useState('Yes');
   const [importLicValidity, setImportLicValidity] = useState('');
-  const [remarks, setRemarks]       = useState('');
+  const [remarks, setRemarks] = useState('');
 
 
 
@@ -298,34 +316,44 @@ const CreateOrder: React.FC<CreateOrderProps> = ({ user, onLogout }) => {
     if (isAddingNewCustomer && !newCustomerName.trim()) { setError('Please enter a new customer name.'); return; }
     if (!customerId && !isAddingNewCustomer) { setError('Please select an existing customer or add a new one.'); return; }
 
+    const todayStr = getTodayStr();
+    if (poDate && poDate > todayStr) {
+      setError('PO Date can only be a past or current date.');
+      return;
+    }
+    if (requestedDate && requestedDate <= todayStr) {
+      setError('Order Delivery Date must be a future date.');
+      return;
+    }
+
     // Validate each product
-for (const product of products) {
-  if (!product.skuCode?.trim()) {
-    setError('SKU Code is required for all products.');
-    return;
-  }
+    for (const product of products) {
+      if (!product.skuCode?.trim()) {
+        setError('SKU Code is required for all products.');
+        return;
+      }
 
-  const productTotalQty =
-    (parseInt(product.salesQty) || 0) +
-    (parseInt(product.freeQty) || 0);
+      const productTotalQty =
+        (parseInt(product.salesQty) || 0) +
+        (parseInt(product.freeQty) || 0);
 
-  if (productTotalQty <= 0) {
-    setError(
-      `Total quantity must be greater than 0 for product ${product.skuCode}`
-    );
-    return;
-  }
+      if (productTotalQty <= 0) {
+        setError(
+          `Total quantity must be greater than 0 for product ${product.skuCode}`
+        );
+        return;
+      }
 
-  // PRICE VALIDATION
-  const productPrice = parseFloat(product.price);
+      // PRICE VALIDATION
+      const productPrice = parseFloat(product.price);
 
-  if (!product.price || isNaN(productPrice) || productPrice <= 0) {
-    setError(
-      `Product price is required for ${product.skuCode}. Please enter a valid price.`
-    );
-    return;
-  }
-}
+      if (!product.price || isNaN(productPrice) || productPrice <= 0) {
+        setError(
+          `Product price is required for ${product.skuCode}. Please enter a valid price.`
+        );
+        return;
+      }
+    }
 
     // Calculate total quantity across all products for a general check, if needed
     const overallTotalQty = products.reduce((sum, product) => sum + ((parseInt(product.salesQty) || 0) + (parseInt(product.freeQty) || 0)), 0);
@@ -445,9 +473,9 @@ for (const product of products) {
   const cardTitleBlue: React.CSSProperties = { ...cardTitle, color: '#3f51b5', borderBottomColor: '#c5cae9' };
   const grid2: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' };
   const grid3: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' };
-  const fld: React.CSSProperties  = { display: 'flex', flexDirection: 'column', gap: '5px' };
-  const lbl: React.CSSProperties  = { fontSize: '0.78rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
-  const inp: React.CSSProperties  = { padding: '10px 13px', border: '1px solid #cbd5e1', borderRadius: '7px', fontSize: '0.93rem', width: '100%', boxSizing: 'border-box', background: '#fff' };
+  const fld: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '5px' };
+  const lbl: React.CSSProperties = { fontSize: '0.78rem', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' };
+  const inp: React.CSSProperties = { padding: '10px 13px', border: '1px solid #cbd5e1', borderRadius: '7px', fontSize: '0.93rem', width: '100%', boxSizing: 'border-box', background: '#fff' };
   const inpDis: React.CSSProperties = { ...inp, background: '#f1f5f9', color: '#94a3b8', cursor: 'default' };
   const inpAuto: React.CSSProperties = { ...inp, background: '#e8f5e9', color: '#1b5e20', fontWeight: 600 };
   const inpTotal: React.CSSProperties = { ...inp, background: '#fff3e0', color: '#e65100', fontWeight: 700, fontSize: '1rem' };
@@ -468,7 +496,7 @@ for (const product of products) {
           <button className="nav-button" onClick={() => navigate('/orders')}>← Back</button>
         </div>
 
-        {error   && <div className="error-message"   style={{ marginBottom: '16px' }}>{error}</div>}
+        {error && <div className="error-message" style={{ marginBottom: '16px' }}>{error}</div>}
         {success && <div className="success-message" style={{ marginBottom: '16px' }}>{success}</div>}
 
         <form onSubmit={handleSubmit}>
@@ -515,10 +543,10 @@ for (const product of products) {
                 <input
                   type="date"
                   value={poDate}
+                  max={getTodayStr()}
                   onChange={e => handlePoDateChange(e.target.value)}
                   required
-                  disabled={!customerId}
-                  style={customerId ? inp : inpDis}
+                  style={inp}
                 />
               </div>
               <div style={fld}>
@@ -532,8 +560,15 @@ for (const product of products) {
                 />
               </div>
               <div style={fld}>
-                <label style={lbl}>Order Requested Date *</label>
-                <input type="date" value={requestedDate} onChange={e => setRequestedDate(e.target.value)} required style={inp} />
+                <label style={lbl}>Order Delivery Date *</label>
+                <input
+                  type="date"
+                  value={requestedDate}
+                  min={getTomorrowStr()}
+                  onChange={e => setRequestedDate(e.target.value)}
+                  required
+                  style={inp}
+                />
               </div>
               <div style={fld}>
                 <label style={lbl}>Shipping Terms</label>
@@ -574,7 +609,7 @@ for (const product of products) {
             <div style={cardTitleBlue}>📦 Order Details (Products, Quantity, Import License, Remarks)</div>
 
             {products.map((product, index) => (
-            <ProductItem
+              <ProductItem
                 key={product.id}
                 product={product}
                 onUpdate={handleUpdateProduct}
@@ -606,7 +641,7 @@ for (const product of products) {
             </button>
 
             {/* ── 4. Import License (Global) ── */}
-            <div style={{...card, marginTop: '20px'}}>
+            <div style={{ ...card, marginTop: '20px' }}>
               <div style={cardTitle}>📄 Import License</div>
               <div style={grid2}>
                 <div style={fld}>
@@ -632,7 +667,7 @@ for (const product of products) {
             </div>
 
             {/* ── 5. Remarks (Global) ── */}
-            <div style={{...card, marginTop: '20px'}}>
+            <div style={{ ...card, marginTop: '20px' }}>
               <div style={cardTitle}>💬 Remarks</div>
               <textarea
                 value={remarks}

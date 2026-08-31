@@ -3,6 +3,7 @@ import { IMilestone, IOrder, IApproval, IUser, IAuditLog, IMilestoneHistoryEntry
 import { useParams, useNavigate } from 'react-router-dom';
 import { orderAPI, auditAPI } from '../services/api';
 import Header from './Header';
+import { formatDate, formatDateTime } from '../utils/dateUtils';
 
 interface OrderDetailProps {
   user: IUser;
@@ -81,17 +82,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   };
 
   const formatDateDisplay = (dateInput: string | null | undefined): string => {
-    if (!dateInput) return '-';
-    const dateString = String(dateInput).trim();
-    if (!dateString) return '-';
-    const cleanStr = dateString.split('T')[0];
-    const parts = cleanStr.split('-');
-    if (parts.length === 3 && parts[0].length === 4) {
-      const [year, month, day] = parts;
-      return `${day}/${month}/${year}`;
-    }
-    const d = new Date(dateString);
-    return isNaN(d.getTime()) ? dateString : d.toLocaleDateString();
+    return formatDate(dateInput);
   };
 
   const getCurrencySymbol = (currencyCode: string): string => {
@@ -617,7 +608,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             <p><strong>Customer:</strong> {order.customer?.customer_name}</p>
             <p><strong>Country:</strong> {order.country?.name || "-"}</p>
             <p><strong>PO Number:</strong> {order.po_number}</p>
-            <p><strong>PO Date:</strong> {new Date(order.po_date).toLocaleDateString()}</p>
+            <p><strong>PO Date:</strong> {formatDate(order.po_date)}</p>
             <p><strong>Order Price:</strong> {getCurrencySymbol(order.currency)} {order.order_price ? order.order_price.toFixed(2) : 'N/A'}</p>
           </div>
 
@@ -626,7 +617,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             <p><strong>SKU:</strong> {order.sku}</p>
             <p><strong>Product:</strong> {order.product?.product_name}</p>
             <p><strong>Quantity:</strong> {order.quantity}</p>
-            <p><strong>Delivery Date:</strong> {new Date(order.requested_delivery_date).toLocaleDateString()}</p>
+            <p><strong>Delivery Date:</strong> {formatDate(order.requested_delivery_date)}</p>
             <p><strong>Shipping Terms:</strong> {order.shipping_terms || 'N/A'}</p>
           </div>
 
@@ -651,8 +642,8 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
           <div className="form-section">
             <h3>SCM Planning</h3>
-            <p><strong>Tentative Production Date:</strong> {order.tentative_production_date ? new Date(order.tentative_production_date).toLocaleDateString() : 'N/A'}</p>
-            <p><strong>Tentative Release Date:</strong> {order.tentative_release_date ? new Date(order.tentative_release_date).toLocaleDateString() : 'N/A'}</p>
+            <p><strong>Tentative Production Date:</strong> {formatDate(order.tentative_production_date)}</p>
+            <p><strong>Tentative Release Date:</strong> {formatDate(order.tentative_release_date)}</p>
           </div>
 
           {/* Packing Details — visible only for Regulatory department */}
@@ -785,7 +776,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                         ? approval.remarks.replace('[SCM Override] ', '')
                         : '—'}
                     </td>
-                    <td>{approval.approved_at ? new Date(approval.approved_at).toLocaleDateString() : '—'}</td>
+                    <td>{approval.approved_at ? formatDateTime(approval.approved_at, false) : '—'}</td>
                     <td>{getDays()}</td>
                     <td>
                       {showApproveBtn && !isSCMTeam && (
@@ -864,7 +855,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 <div className="mobile-card-row">
                   <span className="mobile-card-label">Date</span>
                   <span className="mobile-card-value">
-                    {approval.approved_at ? new Date(approval.approved_at).toLocaleDateString() : '-'}
+                    {approval.approved_at ? formatDateTime(approval.approved_at, false) : '-'}
                   </span>
                 </div>
                 {showApproveBtn && (
@@ -997,13 +988,13 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                       <div className="mobile-card-row">
                         <span className="mobile-card-label">Target Date</span>
                         <span className="mobile-card-value">
-                          {milestone.target_date ? new Date(milestone.target_date).toLocaleDateString() : '-'}
+                          {formatDate(milestone.target_date)}
                         </span>
                       </div>
                       <div className="mobile-card-row">
                         <span className="mobile-card-label">Actual Date</span>
                         <span className="mobile-card-value">
-                          {milestone.actual_date ? new Date(milestone.actual_date).toLocaleDateString() : '-'}
+                          {formatDate(milestone.actual_date)}
                         </span>
                       </div>
                       <div className="mobile-card-row">
@@ -1062,7 +1053,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                       {log.action.replace(/_/g, ' ')}
                     </span>
                     <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                      {new Date(log.timestamp).toLocaleString()}
+                      {formatDateTime(log.timestamp)}
                     </span>
                   </div>
                        <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '6px' }}>
@@ -1309,16 +1300,16 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 {milestoneHistory.map((entry: IMilestoneHistoryEntry) => (
                   <div key={entry.id} style={{ marginBottom: '12px', paddingBottom: '10px', borderBottom: '1px dotted #ccc' }}>
                     <p style={{ margin: 0, fontWeight: 'bold', color: '#1e293b' }}>
-                      🕒 {new Date(entry.changed_at).toLocaleString()} — 👤 {entry.changed_by_user?.name || entry.changed_by?.name || 'Unknown User'} {entry.changed_by_user?.department ? `(${entry.changed_by_user.department})` : ''}
+                      🕒 {formatDateTime(entry.changed_at)} — 👤 {entry.changed_by_user?.name || entry.changed_by?.name || 'Unknown User'} {entry.changed_by_user?.department ? `(${entry.changed_by_user.department})` : ''}
                     </p>
                     <p style={{ margin: '5px 0 0 0', fontSize: '0.9em' }}>
                       <strong>Change Type:</strong> {entry.change_type === 'TARGET_DATE_UPDATE' ? 'Target Date Update' : entry.change_type === 'STATUS_UPDATE' ? 'Status Update' : entry.change_type}
                     </p>
                     <p style={{ margin: '2px 0 0 0', fontSize: '0.9em' }}>
-                      <strong>Old Value:</strong> {entry.old_value || 'Not Set'}
+                      <strong>Old Value:</strong> {(entry.change_type === 'TARGET_DATE_UPDATE' || entry.change_type === 'ACTUAL_DATE_UPDATE') ? formatDate(entry.old_value) : (entry.old_value || 'Not Set')}
                     </p>
                     <p style={{ margin: '2px 0 0 0', fontSize: '0.9em' }}>
-                      <strong>New Value:</strong> {entry.new_value || 'Not Set'}
+                      <strong>New Value:</strong> {(entry.change_type === 'TARGET_DATE_UPDATE' || entry.change_type === 'ACTUAL_DATE_UPDATE') ? formatDate(entry.new_value) : (entry.new_value || 'Not Set')}
                     </p>
                     <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#334155' }}>
                       <strong>Remarks:</strong> {entry.remarks || 'No remarks provided'}

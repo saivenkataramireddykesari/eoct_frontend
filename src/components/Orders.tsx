@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { orderAPI } from '../services/api';
 import Header from './Header';
+import { formatDate } from '../utils/dateUtils';
 
 interface OrdersProps {
   user: any;
@@ -194,7 +195,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   <td>{order.sku}</td>
                   <td>{order.product?.category || "-"}</td>
                   <td>{order.quantity}</td>
-                  <td>{new Date(order.requested_delivery_date).toLocaleDateString()}</td>
+                  <td>{formatDate(order.requested_delivery_date)}</td>
                   <td>
                     <span className={`status-badge ${getStatusClass(order.status)}`}>
                       {order.status}
@@ -210,7 +211,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                     </span>
                   </td>
                   <td>{order.price}</td>
-                  <td>{new Date(order.created_at).toLocaleDateString()}</td>
+                  <td>{formatDate(order.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -261,7 +262,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Delivery Date</span>
                 <span className="mobile-card-value">
-                  {new Date(order.requested_delivery_date).toLocaleDateString()}
+                  {formatDate(order.requested_delivery_date)}
                 </span>
               </div>
               <div className="mobile-card-row">
@@ -287,7 +288,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Created</span>
                 <span className="mobile-card-value">
-                  {new Date(order.created_at).toLocaleDateString()}
+                  {formatDate(order.created_at)}
                 </span>
               </div>
             </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { registrationAPI, productAPI, formatErrorMessage } from '../services/api';
 import Header from './Header';
 import { Country } from '../shared-types';
+import { formatDate } from '../utils/dateUtils';
 
 interface RegistrationsProps {
   user: any;
@@ -239,14 +240,10 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
                     </span>
                   </td>
                   <td>
-                    {reg.registration_issue_date
-                      ? new Date(reg.registration_issue_date).toLocaleDateString()
-                      : '-'}
+                    {formatDate(reg.registration_issue_date)}
                   </td>
                   <td>
-                    {reg.registration_expiry_date
-                      ? new Date(reg.registration_expiry_date).toLocaleDateString()
-                      : '-'}
+                    {formatDate(reg.registration_expiry_date)}
                     {isExpiringSoon(reg.registration_expiry_date) && (
                       <span style={{ color: '#ff9800', marginLeft: '5px' }}>⚠️ Expiring Soon</span>
                     )}
@@ -311,17 +308,13 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Issue Date</span>
                 <span className="mobile-card-value">
-                  {reg.registration_issue_date
-                    ? new Date(reg.registration_issue_date).toLocaleDateString()
-                    : '-'}
+                  {formatDate(reg.registration_issue_date)}
                 </span>
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Expiry Date</span>
                 <span className="mobile-card-value">
-                  {reg.registration_expiry_date
-                    ? new Date(reg.registration_expiry_date).toLocaleDateString()
-                    : '-'}
+                  {formatDate(reg.registration_expiry_date)}
                   {isExpiringSoon(reg.registration_expiry_date) && (
                     <span style={{ color: '#ff9800', marginLeft: '5px', fontSize: '12px' }}>⚠️ Expiring Soon</span>
                   )}

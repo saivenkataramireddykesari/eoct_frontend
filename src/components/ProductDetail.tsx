@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { productAPI, orderAPI, formatErrorMessage } from '../services/api';
 import Header from './Header';
+import { formatDate, formatDateTime } from '../utils/dateUtils';
 
 interface ProductDetailProps {
   user: any;
@@ -366,7 +367,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ user, onLogout }) => {
               <tbody>
                 {allTransactions.map((tx: any) => (
                   <tr key={tx.id}>
-                    <td>{new Date(tx.created_at).toLocaleString()}</td>
+                    <td>{formatDateTime(tx.created_at)}</td>
                     <td>
                       <span className={`status-badge ${tx.action_by_dept === 'Regulatory' ? 'status-new' : 'status-execution'}`}>
                         {tx.action_by_dept}
@@ -433,7 +434,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ user, onLogout }) => {
                     <td>{o.order_number}</td>
                     <td>{o.customer?.customer_name}</td>
                     <td>{o.quantity}</td>
-                    <td>{new Date(o.requested_delivery_date).toLocaleDateString()}</td>
+                    <td>{formatDate(o.requested_delivery_date)}</td>
                     <td><span className="status-badge status-pending">{o.status}</span></td>
                     <td>
                       <span className={`status-badge ${o.compliance_status === 'PASSED' ? 'status-accepted' : 'status-risk'}`}>

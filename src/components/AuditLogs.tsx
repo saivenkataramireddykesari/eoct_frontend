@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auditAPI } from '../services/api';
 import Header from './Header';
+import { formatDateTime } from '../utils/dateUtils';
 
 interface AuditLogsProps {
   user: any;
@@ -71,7 +72,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
             <tbody>
               {logs.map((log) => (
                 <tr key={log.id}>
-                  <td>{new Date(log.timestamp).toLocaleString()}</td>
+                  <td>{formatDateTime(log.timestamp)}</td>
                   <td>
                     {log.user?.name} ({log.user?.employee_id})
                   </td>
@@ -104,7 +105,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Timestamp</span>
                 <span className="mobile-card-value">
-                  {new Date(log.timestamp).toLocaleString()}
+                  {formatDateTime(log.timestamp)}
                 </span>
               </div>
               <div className="mobile-card-row">

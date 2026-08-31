@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { customerAPI, productAPI, formatErrorMessage } from '../services/api';
 import { Customer, Country } from '../shared-types';
 import Header from './Header';
+import { formatDate } from '../utils/dateUtils';
 
 interface CustomersProps {
   user: any;
@@ -292,9 +293,7 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
                     </span>
                   </td>
                   <td>
-                    {customer.agreement_validity
-                      ? new Date(customer.agreement_validity).toLocaleDateString()
-                      : '-'}
+                    {formatDate(customer.agreement_validity)}
                   </td>
                   <td>
                     <button className="edit-button" onClick={() => handleEditClick(customer)}>
@@ -334,9 +333,7 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Agreement Validity</span>
                 <span className="mobile-card-value">
-                  {customer.agreement_validity
-                    ? new Date(customer.agreement_validity).toLocaleDateString()
-                    : '-'}
+                  {formatDate(customer.agreement_validity)}
                 </span>
               </div>
               <div className="mobile-card-row">
