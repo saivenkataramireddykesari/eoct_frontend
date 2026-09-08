@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 
@@ -16,6 +16,8 @@ import RegulatoryCustomers from './components/RegulatoryCustomers';
 import CreateCustomer from './components/CreateCustomer';
 import SearchResults from './components/SearchResults';
 import CustomerDetail from './components/CustomerDetail';
+import MaintenancePage from './components/MaintenancePage';
+import { systemAPI } from './services/api';
 import './App.css';
 
 interface User {
@@ -30,6 +32,28 @@ interface User {
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [inMaintenance, setInMaintenance] = useState(false);
+  const [maintenanceData, setMaintenanceData] = useState<{
+    message?: string;
+    estimated_completion?: string;
+    updated_at?: string;
+  }>({});
+
+  const checkMaintenance = useCallback(async () => {
+    try {
+      const res = await systemAPI.getMaintenanceStatus();
+      if (res.data) {
+        setInMaintenance(res.data.in_maintenance);
+        setMaintenanceData({
+          message: res.data.message,
+          estimated_completion: res.data.estimated_completion,
+          updated_at: res.data.updated_at
+        });
+      }
+    } catch (err) {
+      console.error("Failed to check maintenance status:", err);
+    }
+  }, []);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -37,8 +61,26 @@ function App() {
     if (storedUser && token) {
       setUser(JSON.parse(storedUser));
     }
+    checkMaintenance();
     setLoading(false);
-  }, []);
+
+    // Event listener for 503 HTTP responses
+    const handleMaintenanceEvent = (e: any) => {
+      setInMaintenance(true);
+      if (e.detail) {
+        setMaintenanceData({
+          message: e.detail.message || e.detail.detail,
+          estimated_completion: e.detail.estimated_completion,
+          updated_at: e.detail.updated_at
+        });
+      }
+    };
+
+    window.addEventListener('system-maintenance-event', handleMaintenanceEvent);
+    return () => {
+      window.removeEventListener('system-maintenance-event', handleMaintenanceEvent);
+    };
+  }, [checkMaintenance]);
 
   const handleLogin = (userData: User, token: string) => {
     setUser(userData);
@@ -56,6 +98,21 @@ function App() {
     return <div className="loading">Loading...</div>;
   }
 
+  // Admin bypass check: Administrators, Managers, and Exports department users can bypass maintenance mode if needed
+  const isAdmin = user && (user.role === 'admin' || user.role === 'manager' || user.department === 'Exports');
+
+  // If in maintenance mode and user is not an admin, render the Maintenance Page
+  if (inMaintenance && !isAdmin) {
+    return (
+      <MaintenancePage
+        user={user}
+        maintenanceData={maintenanceData}
+        onRefreshStatus={checkMaintenance}
+        onDisableMaintenance={() => setInMaintenance(false)}
+      />
+    );
+  }
+
   // Guard: Ensure user is logged in
   const authGuard = (element: React.ReactElement) =>
     user ? element : <Navigate to="/login" />;
@@ -68,6 +125,17 @@ function App() {
     <Router>
       <div className="App">
         <Routes>
+          <Route
+            path="/maintenance"
+            element={
+              <MaintenancePage
+                user={user}
+                maintenanceData={maintenanceData}
+                onRefreshStatus={checkMaintenance}
+                onDisableMaintenance={() => setInMaintenance(false)}
+              />
+            }
+          />
           <Route
             path="/login"
             element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Navigate to="/" />) : <Login onLogin={handleLogin} />}
@@ -114,3 +182,4 @@ function App() {
 }
 
 export default App;
+

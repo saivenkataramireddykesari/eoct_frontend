@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse, FullSearchResultItem, FullSearchResponse } from "../shared-types";
 import { IOrderCreate } from "../types";
 
-const API_URL = 'https://eoct-backend.onrender.com/api';
+const API_URL = 'http://localhost:8000/api';
 
 
 
@@ -38,9 +38,15 @@ api.interceptors.response.use(
   },
   (error) => {
     console.error("Axios Response Error:", error.response || error);
+    if (error.response && (error.response.status === 503 || error.response.data?.in_maintenance)) {
+      window.dispatchEvent(new CustomEvent('system-maintenance-event', {
+        detail: error.response.data
+      }));
+    }
     return Promise.reject(error);
   }
 );
+
 
 
 // Auth APIs
@@ -166,6 +172,15 @@ export const searchAPI = {
   getSuggestions: (query: string) => api.get<SearchSuggestionsResponse>('/search/suggestions', { params: { query } }),
   fullSearch: (query: string) => api.get<FullSearchResponse>('/search/full', { params: { query } }),
 };
+
+// System APIs
+export const systemAPI = {
+  getMaintenanceStatus: () =>
+    api.get<{ in_maintenance: boolean; message: string; estimated_completion?: string; updated_at?: string }>('/system/maintenance'),
+  setMaintenanceStatus: (in_maintenance: boolean, message?: string, estimated_completion?: string) =>
+    api.post('/system/maintenance', { in_maintenance, message, estimated_completion }),
+};
+
 
 export const formatErrorMessage = (err: any, fallback: string = 'An error occurred'): string => {
   if (!err) return fallback;
