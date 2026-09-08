@@ -21,7 +21,7 @@ const MaintenancePage: React.FC<MaintenancePageProps> = ({
   const [checking, setChecking] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<string>(new Date().toLocaleTimeString());
   const [statusMessage, setStatusMessage] = useState<string>(
-    maintenanceData?.message || 'We are currently performing scheduled maintenance to upgrade infrastructure and optimize system performance. All your data remains completely safe and secure.'
+    maintenanceData?.message || 'We are currently performing scheduled database migration to optimize system performance. All your data remains completely safe and secure'.
   );
   const [estimatedEnd, setEstimatedEnd] = useState<string>(
     maintenanceData?.estimated_completion || 'Approx. 30 minutes'
