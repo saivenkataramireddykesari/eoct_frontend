@@ -41,14 +41,17 @@ export interface IOrder {
   unregistered_product_name?: string | null; // New field
   unregistered_product_description?: string | null; // New field
   product: {
+    sku_code?: string;
     product_name: string;
+    category?: string;
     pack_size: string;
-    standard_batch_size: string;
-    moq: string;
+    standard_batch_size: string | number;
+    moq: string | number;
     primary_pm_code: string;
     secondary_pm_code: string;
     leaf_pm_code: string;
     artwork_status: string;
+    pm_code_requests?: any[];
   } | null; // Allow product to be null
   quantity: number;
   requested_delivery_date: string;

@@ -138,17 +138,17 @@ function App() {
           />
           <Route
             path="/login"
-            element={user ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Navigate to="/" />) : <Login onLogin={handleLogin} />}
+            element={user ? (user.department === 'Artwork' ? <Navigate to="/products?tab=submit_pm_orders" /> : <Navigate to="/" />) : <Login onLogin={handleLogin} />}
           />
           <Route
             path="/"
             element={
               user
-                ? (user.department === 'Artwork' ? <Navigate to="/products" /> : <Navigate to="/orders" />)
+                ? (user.department === 'Artwork' ? <Navigate to="/products?tab=submit_pm_orders" /> : <Navigate to="/orders" />)
                 : <Navigate to="/login" />
             }
           />
-          <Route path="/orders" element={artworkGuard(<Orders user={user!} onLogout={handleLogout} />)} />
+          <Route path="/orders" element={authGuard(<Orders user={user!} onLogout={handleLogout} />)} />
           <Route path="/orders/create" element={artworkGuard(<CreateOrder user={user!} onLogout={handleLogout} />)} />
           <Route path="/orders/:id" element={authGuard(<OrderDetail user={user!} onLogout={handleLogout} />)} />
           <Route path="/orders/edit/:id" element={artworkGuard(<EditOrder user={user!} onLogout={handleLogout} />)} />

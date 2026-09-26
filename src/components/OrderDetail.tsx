@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { IMilestone, IOrder, IApproval, IUser, IAuditLog, IMilestoneHistoryEntry } from '../types';
 import { useParams, useNavigate } from 'react-router-dom';
-import { orderAPI, auditAPI } from '../services/api';
+import { orderAPI, auditAPI, productAPI } from '../services/api';
 import Header from './Header';
 import { formatDate, formatDateTime } from '../utils/dateUtils';
 
@@ -30,7 +30,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   const [milestoneModal, setMilestoneModal] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<IMilestone | null>(null);
   const [milestoneData, setMilestoneData] = useState({
-    status: 'COMPLETED',
+    status: '',
     target_date: '',
     actual_date: '',
     remarks: '',
@@ -71,6 +71,34 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         return isoDateString;
       }
     }
+    const handleRequestPmCode = async () => {
+      try {
+        if (!order?.sku) {
+          alert('SKU is not available for this order.');
+          return;
+        }
+
+        // Request PM Code
+        await productAPI.requestPmCode(order.sku);
+
+        alert('PM Code request submitted successfully.');
+
+        // Refresh current order
+        if (id) {
+          const response = await orderAPI.getOrder(Number(id));
+          setOrder(response.data);
+        }
+
+      } catch (error: any) {
+        console.error('Error requesting PM Code:', error);
+
+        alert(
+          error?.response?.data?.detail ||
+          error?.response?.data?.message ||
+          'Failed to request PM Code.'
+        );
+      }
+    };
 
     // Attempt to parse with new Date() as a fallback for other formats, then validate
     const fallbackDate = new Date(dateString);
@@ -106,6 +134,21 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     'Batch Released'
   ];
 
+  const EXPORTS_TARGET_MILESTONES = [
+    'Ready for Shipment',
+    'Freight Booked',
+    'Shipped',
+    'Delivered'
+  ];
+
+  // Exports bulk target dates state (separate from SCM)
+  const [exportsBulkTargetModal, setExportsBulkTargetModal] = useState(false);
+  const [exportsBulkTargetDates, setExportsBulkTargetDates] = useState<Record<string, string>>({});
+  const [exportsBulkMilestoneIds, setExportsBulkMilestoneIds] = useState<Record<string, number | null>>({});
+  const originalExportsBulkTargetDatesRef = useRef<Record<string, string>>({});
+  const currentExportsBulkTargetDatesRef = useRef<Record<string, string>>({});
+  const [isSubmittingExportsBulk, setIsSubmittingExportsBulk] = useState(false);
+
   const normalizeMilestoneName = (value: unknown) =>
     String(value ?? '')
       .trim()
@@ -113,104 +156,202 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
       .toLowerCase();
 
   const openBulkTargetModal = () => {
-  // Map existing DB milestones by normalized name (handles the PM Procurement Released → PO Released alias)
-  const milestoneMap = new Map<string, IMilestone>(
-    (order?.milestones || []).map((milestone: IMilestone) => [
-      normalizeMilestoneName(milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name),
-      milestone
-    ])
-  );
+    // Map existing DB milestones by normalized name (handles the PM Procurement Released → PO Released alias)
+    const milestoneMap = new Map<string, IMilestone>(
+      (order?.milestones || []).map((milestone: IMilestone) => [
+        normalizeMilestoneName(milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name),
+        milestone
+      ])
+    );
 
-  // DEBUG: see which milestones exist in DB and which are missing
-  console.table(
-    REQUIRED_TARGET_MILESTONES.map(name => {
+    // DEBUG: see which milestones exist in DB and which are missing
+    console.table(
+      REQUIRED_TARGET_MILESTONES.map(name => {
+        const key = normalizeMilestoneName(name);
+        const milestone = milestoneMap.get(key);
+        return {
+          requiredName: name,
+          existsInDb: Boolean(milestone),
+          databaseId: milestone?.id ?? null,
+          existingTargetDate: milestone?.target_date ?? null,
+        };
+      })
+    );
+
+    const initialDates: Record<string, string> = {};
+    const ids: Record<string, number | null> = {};
+
+    // ✅ ALWAYS create an entry for every required milestone —
+    // missing ones get a real DB id later (or null = will be created on save)
+    REQUIRED_TARGET_MILESTONES.forEach(name => {
       const key = normalizeMilestoneName(name);
       const milestone = milestoneMap.get(key);
-      return {
-        requiredName: name,
-        existsInDb: Boolean(milestone),
-        databaseId: milestone?.id ?? null,
-        existingTargetDate: milestone?.target_date ?? null,
-      };
-    })
-  );
+      ids[key] = milestone && typeof milestone.id === 'number' ? milestone.id : null;
+      initialDates[key] = normalizeDate(milestone?.target_date);
+    });
 
-  const initialDates: Record<string, string> = {};
-  const ids: Record<string, number | null> = {};
-
-  // ✅ ALWAYS create an entry for every required milestone —
-  // missing ones get a real DB id later (or null = will be created on save)
-  REQUIRED_TARGET_MILESTONES.forEach(name => {
-    const key = normalizeMilestoneName(name);
-    const milestone = milestoneMap.get(key);
-    ids[key] = milestone && typeof milestone.id === 'number' ? milestone.id : null;
-    initialDates[key] = normalizeDate(milestone?.target_date);
-  });
-
-  setBulkMilestoneIds(ids);
-  originalBulkTargetDatesRef.current = { ...initialDates };
-  currentBulkTargetDatesRef.current = { ...initialDates };
-  setBulkTargetDates({ ...initialDates });
-  setBulkTargetModal(true);
-};
+    setBulkMilestoneIds(ids);
+    originalBulkTargetDatesRef.current = { ...initialDates };
+    currentBulkTargetDatesRef.current = { ...initialDates };
+    setBulkTargetDates({ ...initialDates });
+    setBulkTargetModal(true);
+  };
 
   const handleBulkTargetSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (isSubmittingBulk) return;
+    e.preventDefault();
+    if (isSubmittingBulk) return;
 
-  if (!order) {
-    alert('Order data is missing.');
-    return;
-  }
+    if (!order) {
+      alert('Order data is missing.');
+      return;
+    }
 
-  // 1. Every required milestone must have a valid date
-  const missing = REQUIRED_TARGET_MILESTONES.filter(
-    name => !normalizeDate(currentBulkTargetDatesRef.current[normalizeMilestoneName(name)])
-  );
-  if (missing.length > 0) {
-    alert('Please enter a target date for:\n• ' + missing.join('\n• '));
-    return;
-  }
-
-  // 2. Only send milestones whose date actually changed
-  const changed = REQUIRED_TARGET_MILESTONES.filter(name => {
-    const key = normalizeMilestoneName(name);
-    return (
-      normalizeDate(currentBulkTargetDatesRef.current[key]) !==
-      normalizeDate(originalBulkTargetDatesRef.current[key])
-    );
-  });
-
-  if (changed.length === 0) {
-    alert('No target dates were changed.');
-    return;
-  }
-
-  // 3. Build payload — real id when available, name ALWAYS (backend fallback)
-  const milestonesPayload = changed.map(name => {
-    const key = normalizeMilestoneName(name);
-    const realId = bulkMilestoneIds[key];
-    return {
-      milestone_id: typeof realId === 'number' ? realId : null,   // ✅ null, not 0
-      milestone_name: name,                                        // ✅ always send
-      target_date: normalizeDate(currentBulkTargetDatesRef.current[key]) || null,
+    // Helper: check if a milestone already had a date when the modal opened (locked)
+    const isLocked = (name: string) => {
+      const key = normalizeMilestoneName(name);
+      return typeof bulkMilestoneIds[key] === 'number' && !!originalBulkTargetDatesRef.current[key];
     };
-  });
 
-  console.log('[MILESTONE BULK PAYLOAD]', milestonesPayload);
+    // 1. Every UNLOCKED required milestone must have a valid date
+    const missing = REQUIRED_TARGET_MILESTONES.filter(name => {
+      if (isLocked(name)) return false; // skip locked milestones
+      return !normalizeDate(currentBulkTargetDatesRef.current[normalizeMilestoneName(name)]);
+    });
+    if (missing.length > 0) {
+      alert('Please enter a target date for:\n• ' + missing.join('\n• '));
+      return;
+    }
 
-  try {
-    setIsSubmittingBulk(true);
-    await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
-    setBulkTargetModal(false);
-    await fetchOrder(false);
-  } catch (error: any) {
-    console.error('Error saving bulk target dates:', error);
-    alert(error.response?.data?.detail || 'Failed to save milestone target dates');
-  } finally {
-    setIsSubmittingBulk(false);
-  }
-};
+    // 2. Only send milestones whose date actually changed (locked ones are excluded automatically)
+    const changed = REQUIRED_TARGET_MILESTONES.filter(name => {
+      if (isLocked(name)) return false; // never send locked milestones
+      const key = normalizeMilestoneName(name);
+      return (
+        normalizeDate(currentBulkTargetDatesRef.current[key]) !==
+        normalizeDate(originalBulkTargetDatesRef.current[key])
+      );
+    });
+
+    if (changed.length === 0) {
+      alert('No target dates were changed.');
+      return;
+    }
+
+    // 3. Build payload — real id when available, name ALWAYS (backend fallback)
+    const milestonesPayload = changed.map(name => {
+      const key = normalizeMilestoneName(name);
+      const realId = bulkMilestoneIds[key];
+      return {
+        milestone_id: typeof realId === 'number' ? realId : null,   // ✅ null, not 0
+        milestone_name: name,                                        // ✅ always send
+        target_date: normalizeDate(currentBulkTargetDatesRef.current[key]) || null,
+      };
+    });
+
+    console.log('[MILESTONE BULK PAYLOAD]', milestonesPayload);
+
+    try {
+      setIsSubmittingBulk(true);
+      await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
+      setBulkTargetModal(false);
+      await fetchOrder(false);
+    } catch (error: any) {
+      console.error('Error saving bulk target dates:', error);
+      alert(error.response?.data?.detail || 'Failed to save milestone target dates');
+    } finally {
+      setIsSubmittingBulk(false);
+    }
+  };
+
+  // ── Exports Bulk Target Dates (Logistics milestones) ──
+  const openExportsBulkTargetModal = () => {
+    const milestoneMap = new Map<string, IMilestone>(
+      (order?.milestones || []).map((milestone: IMilestone) => [
+        normalizeMilestoneName(milestone.name),
+        milestone
+      ])
+    );
+
+    const initialDates: Record<string, string> = {};
+    const ids: Record<string, number | null> = {};
+
+    EXPORTS_TARGET_MILESTONES.forEach(name => {
+      const key = normalizeMilestoneName(name);
+      const milestone = milestoneMap.get(key);
+      ids[key] = milestone && typeof milestone.id === 'number' ? milestone.id : null;
+      initialDates[key] = normalizeDate(milestone?.target_date);
+    });
+
+    setExportsBulkMilestoneIds(ids);
+    originalExportsBulkTargetDatesRef.current = { ...initialDates };
+    currentExportsBulkTargetDatesRef.current = { ...initialDates };
+    setExportsBulkTargetDates({ ...initialDates });
+    setExportsBulkTargetModal(true);
+  };
+
+  const handleExportsBulkTargetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmittingExportsBulk) return;
+
+    if (!order) {
+      alert('Order data is missing.');
+      return;
+    }
+
+    const isLocked = (name: string) => {
+      const key = normalizeMilestoneName(name);
+      return typeof exportsBulkMilestoneIds[key] === 'number' && !!originalExportsBulkTargetDatesRef.current[key];
+    };
+
+    // Every UNLOCKED milestone must have a valid date
+    const missing = EXPORTS_TARGET_MILESTONES.filter(name => {
+      if (isLocked(name)) return false;
+      return !normalizeDate(currentExportsBulkTargetDatesRef.current[normalizeMilestoneName(name)]);
+    });
+    if (missing.length > 0) {
+      alert('Please enter a target date for:\n• ' + missing.join('\n• '));
+      return;
+    }
+
+    // Only send milestones whose date actually changed
+    const changed = EXPORTS_TARGET_MILESTONES.filter(name => {
+      if (isLocked(name)) return false;
+      const key = normalizeMilestoneName(name);
+      return (
+        normalizeDate(currentExportsBulkTargetDatesRef.current[key]) !==
+        normalizeDate(originalExportsBulkTargetDatesRef.current[key])
+      );
+    });
+
+    if (changed.length === 0) {
+      alert('No target dates were changed.');
+      return;
+    }
+
+    const milestonesPayload = changed.map(name => {
+      const key = normalizeMilestoneName(name);
+      const realId = exportsBulkMilestoneIds[key];
+      return {
+        milestone_id: typeof realId === 'number' ? realId : null,
+        milestone_name: name,
+        target_date: normalizeDate(currentExportsBulkTargetDatesRef.current[key]) || null,
+      };
+    });
+
+    console.log('[EXPORTS MILESTONE BULK PAYLOAD]', milestonesPayload);
+
+    try {
+      setIsSubmittingExportsBulk(true);
+      await orderAPI.setBulkTargetDates(order.id, milestonesPayload);
+      setExportsBulkTargetModal(false);
+      await fetchOrder(false);
+    } catch (error: any) {
+      console.error('Error saving exports bulk target dates:', error);
+      alert(error.response?.data?.detail || 'Failed to save milestone target dates');
+    } finally {
+      setIsSubmittingExportsBulk(false);
+    }
+  };
 
   useEffect(() => {
     fetchOrder(); // Initial fetch should not skip audit/approval
@@ -260,7 +401,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
       setLoading(true);
       const response = await orderAPI.getOrder(orderIdNum);
       setOrder(response.data);
-      
+
       if (!skipAuditAndApproval) {
         // Fetch audit logs
         try {
@@ -269,7 +410,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         } catch (err) {
           console.error('Error fetching audit logs:', err);
         }
-        
+
         // Check if user can approve based on sequential workflow
         await checkCanApprove(orderIdNum);
       }
@@ -338,6 +479,10 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
   const handleMilestoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!milestoneData.status) {
+      alert('Please select a status before submitting.');
+      return;
+    }
     if (!milestoneData.remarks || !milestoneData.remarks.trim()) {
       alert('Remarks are mandatory when updating a milestone.');
       return;
@@ -578,6 +723,49 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     return <div className="loading">Order not found</div>;
   }
 
+  // ================================
+  // PM CODE FUNCTIONALITY
+  // ================================
+  const handleRequestPmCode = async () => {
+    try {
+      if (!order.sku) {
+        alert('SKU is not available for this order.');
+        return;
+      }
+
+      // Send PM Code request
+      await productAPI.requestPmCode(order.sku);
+
+      alert('PM Code request submitted successfully.');
+
+      // Refresh order details
+      await fetchOrder(true);
+
+    } catch (error: any) {
+      console.error('Error requesting PM Code:', error);
+
+      alert(
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        'Failed to request PM Code.'
+      );
+    }
+  };
+
+  // Show Get PM Code button only for Regulatory users
+  // when the product does not already have a Primary PM Code and has no pending requests.
+  const pmRequests = order.product?.pm_code_requests || [];
+  const latestPmRequest = pmRequests.length > 0 ? pmRequests[pmRequests.length - 1] : null;
+
+  const showGetPmCode =
+    user?.department === 'Regulatory' &&
+    !!order.sku &&
+    !!order.product &&
+    !order.product.primary_pm_code &&
+    order.product.artwork_status !== 'Available' &&
+    (!latestPmRequest || latestPmRequest.status === 'APPROVED' || latestPmRequest.status === 'REJECTED');
+
+  // Existing workflow code
   const workflowMessage = getWorkflowMessage();
   const sortedApprovals = getSortedApprovals();
   const isSCMTeam = user.department === 'SCM';
@@ -600,6 +788,21 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             </button>
           </div>
         </div>
+        {showGetPmCode && (
+          <button className="submit-button" onClick={handleRequestPmCode}>
+            Get PM Code
+          </button>
+        )}
+        {user?.department === 'Regulatory' && latestPmRequest?.status === 'PENDING_ARTWORK' && !order.product?.primary_pm_code && (
+          <div style={{ margin: '10px 0' }}>
+            <span className="status-badge status-hold">Awaiting Artwork PM Code</span>
+          </div>
+        )}
+        {user?.department === 'Regulatory' && latestPmRequest?.status === 'AWAITING_REGULATORY_APPROVAL' && !order.product?.primary_pm_code && (
+          <div style={{ margin: '10px 0' }}>
+            <span className="status-badge status-new">Awaiting Regulatory Approval</span>
+          </div>
+        )}
 
         <div className="form-grid">
           <div className="form-section">
@@ -658,10 +861,9 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               <p><strong>Leaf PM Code:</strong> {order.product.leaf_pm_code || 'N/A'}</p>
               <p>
                 <strong>Artwork Status:</strong>{' '}
-                <span className={`status-badge ${
-                  order.product.artwork_status === 'Available' ? 'status-accepted' :
+                <span className={`status-badge ${order.product.artwork_status === 'Available' ? 'status-accepted' :
                   order.product.artwork_status === 'Pending' ? 'status-hold' : 'status-risk'
-                }`}>
+                  }`}>
                   {order.product.artwork_status || 'N/A'}
                 </span>
               </p>
@@ -676,10 +878,10 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
         {/* Workflow Status Banner */}
         {workflowMessage && (
-          <div style={{ 
-            marginTop: '20px', 
-            padding: '15px', 
-            backgroundColor: '#fff3cd', 
+          <div style={{
+            marginTop: '20px',
+            padding: '15px',
+            backgroundColor: '#fff3cd',
             border: '1px solid #ffc107',
             borderRadius: '5px',
             color: '#856404'
@@ -738,65 +940,65 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                   const showApproveBtn = canShowApproveButton(approval);
 
                   return (
-                  <tr key={approval.id}>
-                    <td>{approval.sequence || '-'}</td>
-                    <td>
-                      <strong>
-                      {approval.department === 'EXPORTS_MANAGER_INITIAL' ? '✉ Exports Manager (Initial)' :
-                       approval.department === 'EXPORTS_MANAGER_FINAL' ? '✅ Exports Manager (Final Sign-off)' :
-                       approval.department === 'REGULATORY' ? '🔬 Regulatory' :
-                       approval.department === 'ARTWORK' ? '🎨 Artwork' :
-                       approval.department === 'FINANCE' ? '💰 Finance' :
-                       approval.department}
-                      </strong>
-                    </td>
-                    <td>
-                      <span className={`status-badge ${getStatusClass(approval.status)}`}>
-                        {approval.status}
-                      </span>
-                    </td>
-                    <td>
-                      {approval.approver?.name
-                        ? <span><strong>{approval.approver.name}</strong><br/><small style={{color:'#64748b'}}>{approval.approver.department}</small></span>
-                        : <span style={{color:'#94a3b8'}}>—</span>}
-                      {isScmOverride && (
-                        <span style={{
-                          marginLeft: '6px',
-                          fontSize: '0.75em',
-                          background: '#ff6f00',
-                          color: '#fff',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontWeight: 600
-                        }}>SCM Override</span>
-                      )}
-                    </td>
-                    <td>
-                      {approval.remarks
-                        ? approval.remarks.replace('[SCM Override] ', '')
-                        : '—'}
-                    </td>
-                    <td>{approval.approved_at ? formatDateTime(approval.approved_at, false) : '—'}</td>
-                    <td>{getDays()}</td>
-                    <td>
-                      {showApproveBtn && !isSCMTeam && (
-                        <button
-                          className="nav-button"
-                          style={canApproveStatus?.is_scm_override ? { background: '#ff6f00', borderColor: '#e65100', color: '#fff' } : {}}
-                          onClick={() => setApprovalModal(true)}
-                        >
-                          {canApproveStatus?.is_scm_override ? '⚡ Override' : '✔ Approve / Reject'}
-                        
-                        </button>
-                      )}
-                      {approval.status === 'PENDING' &&
-                       !canApproveStatus?.can_approve && (
-                        <span style={{ color: '#94a3b8', fontSize: '0.82em' }}>
-                          ⏳ Waiting for prior approval
+                    <tr key={approval.id}>
+                      <td>{approval.sequence || '-'}</td>
+                      <td>
+                        <strong>
+                          {approval.department === 'EXPORTS_MANAGER_INITIAL' ? '✉ Exports Manager (Initial)' :
+                            approval.department === 'EXPORTS_MANAGER_FINAL' ? '✅ Exports Manager (Final Sign-off)' :
+                              approval.department === 'REGULATORY' ? '🔬 Regulatory' :
+                                approval.department === 'ARTWORK' ? '🎨 Artwork' :
+                                  approval.department === 'FINANCE' ? '💰 Finance' :
+                                    approval.department}
+                        </strong>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${getStatusClass(approval.status)}`}>
+                          {approval.status}
                         </span>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td>
+                        {approval.approver?.name
+                          ? <span><strong>{approval.approver.name}</strong><br /><small style={{ color: '#64748b' }}>{approval.approver.department}</small></span>
+                          : <span style={{ color: '#94a3b8' }}>—</span>}
+                        {isScmOverride && (
+                          <span style={{
+                            marginLeft: '6px',
+                            fontSize: '0.75em',
+                            background: '#ff6f00',
+                            color: '#fff',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: 600
+                          }}>SCM Override</span>
+                        )}
+                      </td>
+                      <td>
+                        {approval.remarks
+                          ? approval.remarks.replace('[SCM Override] ', '')
+                          : '—'}
+                      </td>
+                      <td>{approval.approved_at ? formatDateTime(approval.approved_at, false) : '—'}</td>
+                      <td>{getDays()}</td>
+                      <td>
+                        {showApproveBtn && !isSCMTeam && (
+                          <button
+                            className="nav-button"
+                            style={canApproveStatus?.is_scm_override ? { background: '#ff6f00', borderColor: '#e65100', color: '#fff' } : {}}
+                            onClick={() => setApprovalModal(true)}
+                          >
+                            {canApproveStatus?.is_scm_override ? '⚡ Override' : '✔ Approve / Reject'}
+
+                          </button>
+                        )}
+                        {approval.status === 'PENDING' &&
+                          !canApproveStatus?.can_approve && (
+                            <span style={{ color: '#94a3b8', fontSize: '0.82em' }}>
+                              ⏳ Waiting for prior approval
+                            </span>
+                          )}
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -810,75 +1012,75 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 approval.remarks && approval.remarks.startsWith('[SCM Override]');
               const showApproveBtn = canShowApproveButton(approval);
               return (
-              <div key={approval.id} className="mobile-card">
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Sequence</span>
-                  <span className="mobile-card-value">{approval.sequence || '-'}</span>
-                </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Department</span>
-                  <span className="mobile-card-value">
-                  {approval.department} {approval.sequence === 1 ? '(Initial)' : approval.sequence === 5 ? '(Final)' : ''}
-                  </span>
-                </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Status</span>
-                  <span className="mobile-card-value">
-                    <span className={`status-badge ${getStatusClass(approval.status)}`}>
-                      {approval.status}
+                <div key={approval.id} className="mobile-card">
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Sequence</span>
+                    <span className="mobile-card-value">{approval.sequence || '-'}</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Department</span>
+                    <span className="mobile-card-value">
+                      {approval.department} {approval.sequence === 1 ? '(Initial)' : approval.sequence === 5 ? '(Final)' : ''}
                     </span>
-                  </span>
-                </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Approver</span>
-                  <span className="mobile-card-value">
-                    {approval.approver?.name || '-'}
-                    {isScmOverride && (
-                      <span style={{
-                        marginLeft: '6px',
-                        fontSize: '0.75em',
-                        background: '#ff6f00',
-                        color: '#fff',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontWeight: 600
-                      }}>SCM Override</span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Status</span>
+                    <span className="mobile-card-value">
+                      <span className={`status-badge ${getStatusClass(approval.status)}`}>
+                        {approval.status}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Approver</span>
+                    <span className="mobile-card-value">
+                      {approval.approver?.name || '-'}
+                      {isScmOverride && (
+                        <span style={{
+                          marginLeft: '6px',
+                          fontSize: '0.75em',
+                          background: '#ff6f00',
+                          color: '#fff',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 600
+                        }}>SCM Override</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Remarks</span>
+                    <span className="mobile-card-value">
+                      {approval.remarks ? approval.remarks.replace('[SCM Override] ', '') : '-'}
+                    </span>
+                  </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Date</span>
+                    <span className="mobile-card-value">
+                      {approval.approved_at ? formatDateTime(approval.approved_at, false) : '-'}
+                    </span>
+                  </div>
+                  {showApproveBtn && (
+                    <div className="mobile-card-row">
+                      <button
+                        className="nav-button"
+                        style={canApproveStatus?.is_scm_override ? { background: '#ff6f00', borderColor: '#e65100', color: '#fff', width: '100%', marginTop: '10px' } : { width: '100%', marginTop: '10px' }}
+                        onClick={() => setApprovalModal(true)}
+                      >
+                        {canApproveStatus?.is_scm_override ? '⚡ Override' : '✔ Approve / Reject'}
+                      </button>
+                    </div>
+                  )}
+                  {approval.status === 'PENDING' &&
+                    !canApproveStatus?.can_approve &&
+                    approval.department === user.department && (
+                      <div className="mobile-card-row">
+                        <span style={{ color: '#999', fontSize: '0.85em' }}>
+                          Waiting for previous approvals...
+                        </span>
+                      </div>
                     )}
-                  </span>
                 </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Remarks</span>
-                  <span className="mobile-card-value">
-                    {approval.remarks ? approval.remarks.replace('[SCM Override] ', '') : '-'}
-                  </span>
-                </div>
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Date</span>
-                  <span className="mobile-card-value">
-                    {approval.approved_at ? formatDateTime(approval.approved_at, false) : '-'}
-                  </span>
-                </div>
-                {showApproveBtn && (
-                  <div className="mobile-card-row">
-                    <button
-                      className="nav-button"
-                      style={canApproveStatus?.is_scm_override ? { background: '#ff6f00', borderColor: '#e65100', color: '#fff', width: '100%', marginTop: '10px' } : { width: '100%', marginTop: '10px' }}
-                      onClick={() => setApprovalModal(true)}
-                    >
-                      {canApproveStatus?.is_scm_override ? '⚡ Override' : '✔ Approve / Reject'}
-                    </button>
-                  </div>
-                )}
-                {approval.status === 'PENDING' &&
-                 !canApproveStatus?.can_approve &&
-                 approval.department === user.department && (
-                  <div className="mobile-card-row">
-                    <span style={{ color: '#999', fontSize: '0.85em' }}>
-                      Waiting for previous approvals...
-                    </span>
-                  </div>
-                )}
-              </div>
               );
             })}
           </div>
@@ -889,11 +1091,18 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
             <h3 style={{ margin: 0 }}>Execution Milestones</h3>
 
-            {user.department === 'SCM' && (
-              <button className="nav-button" onClick={openBulkTargetModal}>
-                Set Target Dates
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {user.department === 'SCM' && (
+                <button className="nav-button" onClick={openBulkTargetModal}>
+                  Set Target Dates (SCM)
+                </button>
+              )}
+              {(user.department === 'Exports' || user.department === 'Exports Team' || user.department?.startsWith('Exports')) && (
+                <button className="nav-button" onClick={openExportsBulkTargetModal}>
+                  Set Target Dates
+                </button>
+              )}
+            </div>
           </div>
 
 
@@ -938,6 +1147,12 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                             className="nav-button"
                             onClick={() => {
                               setSelectedMilestone(milestone);
+                              setMilestoneData({
+                                status: '',
+                                target_date: normalizeDate(milestone.target_date) || '',
+                                actual_date: normalizeDate(milestone.actual_date) || '',
+                                remarks: '',
+                              });
                               setMilestoneModal(true);
                             }}
                           >
@@ -967,60 +1182,66 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             </table>
           </div>
 
-              {['Artwork', 'SCM', 'Logistics'].map((category) => (
-                <div key={category} className="mobile-table-cards">
-                {getUniqueMilestones()
-                  ?.filter((m: IMilestone) => m.category === category)
-                  .map((milestone: IMilestone) => (
-                    <div key={milestone.id} className="mobile-card">
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Milestone</span>
-                        <span className="mobile-card-value">{milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name}</span>
-                      </div>
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Status</span>
-                        <span className="mobile-card-value">
-                          <span className={`status-badge ${getStatusClass(milestone.status)}`}>
-                            {milestone.status}
-                          </span>
-                        </span>
-                      </div>
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Target Date</span>
-                        <span className="mobile-card-value">
-                          {formatDate(milestone.target_date)}
-                        </span>
-                      </div>
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Actual Date</span>
-                        <span className="mobile-card-value">
-                          {formatDate(milestone.actual_date)}
-                        </span>
-                      </div>
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Remarks</span>
-                        <span className="mobile-card-value">{milestone.remarks || '-'}</span>
-                      </div>
-                      <div className="mobile-card-row">
-                        {canUpdateMilestone(milestone) ? (
-                          <button
-                            className="nav-button"
-                            onClick={() => {
-                              setSelectedMilestone(milestone);
-                              setMilestoneModal(true);
-                            }}
-                            style={{ width: '100%', marginTop: '10px' }}
-                          >
-                            Update
-                          </button>
-                        ) : (
-                          <span style={{ color: '#999', fontSize: '0.85em' }}>View Only</span>
-                        )}
-                      </div>
+          {['Artwork', 'SCM', 'Logistics'].map((category) => (
+            <div key={category} className="mobile-table-cards">
+              {getUniqueMilestones()
+                ?.filter((m: IMilestone) => m.category === category)
+                .map((milestone: IMilestone) => (
+                  <div key={milestone.id} className="mobile-card">
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Milestone</span>
+                      <span className="mobile-card-value">{milestone.name === 'PM Procurement Released' ? 'PO Released' : milestone.name}</span>
                     </div>
-                  ))}
-              </div>
-              ))}
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Status</span>
+                      <span className="mobile-card-value">
+                        <span className={`status-badge ${getStatusClass(milestone.status)}`}>
+                          {milestone.status}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Target Date</span>
+                      <span className="mobile-card-value">
+                        {formatDate(milestone.target_date)}
+                      </span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Actual Date</span>
+                      <span className="mobile-card-value">
+                        {formatDate(milestone.actual_date)}
+                      </span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Remarks</span>
+                      <span className="mobile-card-value">{milestone.remarks || '-'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      {canUpdateMilestone(milestone) ? (
+                        <button
+                          className="nav-button"
+                          onClick={() => {
+                            setSelectedMilestone(milestone);
+                            setMilestoneData({
+                              status: '',
+                              target_date: normalizeDate(milestone.target_date) || '',
+                              actual_date: normalizeDate(milestone.actual_date) || '',
+                              remarks: '',
+                            });
+                            setMilestoneModal(true);
+                          }}
+                          style={{ width: '100%', marginTop: '10px' }}
+                        >
+                          Update
+                        </button>
+                      ) : (
+                        <span style={{ color: '#999', fontSize: '0.85em' }}>View Only</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          ))}
         </div>
 
         {/* Audit Trail Section */}
@@ -1032,9 +1253,9 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
           {auditLogs.length === 0 ? (
             <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>No audit logs recorded for this order.</p>
           ) : (
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
               gap: '12px',
               maxHeight: '400px',
               overflowY: 'auto',
@@ -1056,7 +1277,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                       {formatDateTime(log.timestamp)}
                     </span>
                   </div>
-                       <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '0.88rem', color: '#334155', marginBottom: '6px' }}>
                     <strong>User:</strong> {log.user ? `${log.user.name} (${log.user.department})` : 'System'}
                   </div>
 
@@ -1089,8 +1310,8 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               {isSCMTeam ? 'Submit Approval' : (canApproveStatus?.is_scm_override
                 ? `⚡ SCM Override — ${canApproveStatus?.pending_department || ''} Approval`
                 : canApproveStatus?.is_exports_override
-                ? `⭐ Exports Manager Override — ${canApproveStatus?.pending_department || ''} Approval`
-                : 'Submit Approval')}
+                  ? `⭐ Exports Manager Override — ${canApproveStatus?.pending_department || ''} Approval`
+                  : 'Submit Approval')}
             </h2>
             {/* Show Primary, Secondary, and Leaf PM codes inside the modal */}
             {order?.product && (
@@ -1147,7 +1368,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                 fontSize: '0.9em',
                 color: '#00838f'
               }}>
-                ⭐ As an Exports Manager, you are approving the <strong>{canApproveStatus?.pending_department}</strong> approval.
+                As an Exports Manager, you are approving the <strong>{canApproveStatus?.pending_department}</strong> approval.
                 This action will be recorded in the audit trail.
               </div>
             )}
@@ -1233,11 +1454,13 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             <h2>Update Milestone: {selectedMilestone.name === 'PM Procurement Released' ? 'PO Released' : selectedMilestone.name}</h2>
             <form onSubmit={handleMilestoneSubmit}>
               <div className="form-group">
-                <label>Status</label>
+                <label>Status <span style={{ color: '#e53935', marginLeft: '4px' }}>*</span></label>
                 <select
                   value={milestoneData.status}
+                  required
                   onChange={(e) => setMilestoneData({ ...milestoneData, status: e.target.value })}
                 >
+                  <option value="" disabled>— Select Status —</option>
                   <option value="PENDING">Pending</option>
                   <option value="IN PROGRESS">In Progress</option>
                   <option value="COMPLETED">Completed</option>
@@ -1246,15 +1469,28 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
               </div>
 
               <div className="form-group">
-                <label>Target Date</label>
-                <input
+                {/* <label>
+                  Target Date
+                  {user.department === 'SCM' && selectedMilestone?.target_date && (
+                    <span style={{ fontSize: '0.78em', color: '#388e3c', marginLeft: '6px' }}>
+                      (already set — cannot be changed)
+                    </span>
+                  )}
+                </label> */}
+                {/* <input
                   type="date"
                   value={milestoneData.target_date}
-                  onChange={(e) => setMilestoneData({ ...milestoneData, target_date: e.target.value })}
-                />
+                  disabled={user.department === 'SCM' && !!selectedMilestone?.target_date}
+                  style={user.department === 'SCM' && selectedMilestone?.target_date ? { background: '#f1f5f9', color: '#94a3b8', cursor: 'not-allowed' } : {}}
+                  onChange={(e) => {
+                    if (user.department === 'SCM' && selectedMilestone?.target_date) return;
+                    setMilestoneData({ ...milestoneData, target_date: e.target.value });
+                  }}
+                /> */}
               </div>
 
               <div className="form-group">
+
                 <label>Actual Date</label>
                 <input
                   type="date"
@@ -1335,11 +1571,14 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
             <p style={{ fontSize: '0.9em', color: '#666' }}>
               Enter the planned target dates for the SCM execution milestones.
               Milestones not yet in the system will be created automatically on save.
+              <br />
+              <span style={{ color: '#388e3c' }}>Already-set target dates are locked and cannot be changed.</span>
             </p>
             <form onSubmit={handleBulkTargetSubmit}>
               {REQUIRED_TARGET_MILESTONES.map(name => {
                 const key = normalizeMilestoneName(name);
                 const existsInDb = typeof bulkMilestoneIds[key] === 'number';
+                const alreadyHasDate = existsInDb && !!originalBulkTargetDatesRef.current[key];
                 return (
                   <div className="form-group" key={key}>
                     <label>
@@ -1349,12 +1588,20 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                           (new — will be created)
                         </span>
                       )}
+                      {alreadyHasDate && (
+                        <span style={{ fontSize: '0.75em', color: '#388e3c', marginLeft: '6px' }}>
+                          (already set — cannot be changed)
+                        </span>
+                      )}
                     </label>
                     <input
                       type="date"
                       required
                       value={bulkTargetDates[key] || ''}
+                      disabled={alreadyHasDate}
+                      style={alreadyHasDate ? { background: '#f1f5f9', color: '#94a3b8', cursor: 'not-allowed' } : {}}
                       onChange={(e) => {
+                        if (alreadyHasDate) return;
                         const next = { ...currentBulkTargetDatesRef.current, [key]: e.target.value };
                         currentBulkTargetDatesRef.current = next;
                         setBulkTargetDates(next);
@@ -1368,7 +1615,68 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
                   {isSubmittingBulk ? 'Saving…' : 'Save Target Dates'}
                 </button>
                 <button type="button" className="nav-button" disabled={isSubmittingBulk}
-                        onClick={() => setBulkTargetModal(false)}>
+                  onClick={() => setBulkTargetModal(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Target Dates Modal for Exports Department */}
+      {exportsBulkTargetModal && (
+        <div className="modal-overlay" onClick={() => { if (!isSubmittingExportsBulk) setExportsBulkTargetModal(false); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Set Target Dates</h2>
+            <p style={{ fontSize: '0.9em', color: '#666' }}>
+              Enter the planned target dates for the Logistics execution milestones.
+              Milestones not yet in the system will be created automatically on save.
+              <br />
+              <span style={{ color: '#388e3c' }}>Already-set target dates are locked and cannot be changed.</span>
+            </p>
+            <form onSubmit={handleExportsBulkTargetSubmit}>
+              {EXPORTS_TARGET_MILESTONES.map(name => {
+                const key = normalizeMilestoneName(name);
+                const existsInDb = typeof exportsBulkMilestoneIds[key] === 'number';
+                const alreadyHasDate = existsInDb && !!originalExportsBulkTargetDatesRef.current[key];
+                return (
+                  <div className="form-group" key={key}>
+                    <label>
+                      {name}
+                      {!existsInDb && (
+                        <span style={{ fontSize: '0.75em', color: '#ff6f00', marginLeft: '6px' }}>
+                          (new — will be created)
+                        </span>
+                      )}
+                      {alreadyHasDate && (
+                        <span style={{ fontSize: '0.75em', color: '#388e3c', marginLeft: '6px' }}>
+                          (already set — cannot be changed)
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={exportsBulkTargetDates[key] || ''}
+                      disabled={alreadyHasDate}
+                      style={alreadyHasDate ? { background: '#f1f5f9', color: '#94a3b8', cursor: 'not-allowed' } : {}}
+                      onChange={(e) => {
+                        if (alreadyHasDate) return;
+                        const next = { ...currentExportsBulkTargetDatesRef.current, [key]: e.target.value };
+                        currentExportsBulkTargetDatesRef.current = next;
+                        setExportsBulkTargetDates(next);
+                      }}
+                    />
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button type="submit" className="nav-button" disabled={isSubmittingExportsBulk}>
+                  {isSubmittingExportsBulk ? 'Saving…' : 'Save Target Dates'}
+                </button>
+                <button type="button" className="nav-button" disabled={isSubmittingExportsBulk}
+                  onClick={() => setExportsBulkTargetModal(false)}>
                   Cancel
                 </button>
               </div>

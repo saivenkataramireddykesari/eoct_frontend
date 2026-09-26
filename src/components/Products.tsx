@@ -39,6 +39,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const [pmModal, setPmModal] = useState<{ sku: string; primaryPmCode: string; secondaryPmCode: string; leafPmCode: string } | null>(null);
   const [primaryPmCodeInput, setPrimaryPmCodeInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<string>('all');
   const [viewProductModal, setViewProductModal] = useState<any | null>(null);
 
   useEffect(() => {
@@ -47,7 +48,24 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     if (q) {
       setSearchTerm(q);
     }
-  }, [location.search]);
+    if (user?.department === 'Artwork') {
+      const tabParam = params.get('tab');
+      if (tabParam) {
+        setActiveTab(tabParam);
+      } else {
+        setActiveTab('submit_pm_orders');
+      }
+    } else {
+      setActiveTab('all');
+    }
+  }, [location.search, user?.department]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(location.search);
+    params.set('tab', tab);
+    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
+  };
 
   const [skuSuggestions, setSkuSuggestions] = useState<SkuSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -141,10 +159,9 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
   const fetchProducts = async (p: number = page, scmUserType?: string) => {
     try {
       setLoading(true);
-      const skip = (p - 1) * pageSize;
-      const response = await productAPI.getProducts(skip, pageSize, scmUserType);
+      const response = await productAPI.getProducts(0, 500, scmUserType);
       setProducts(response.data);
-      setHasMore(response.data.length === pageSize);
+      setHasMore(false);
     } catch (error) {
       console.error('Error fetching products:', error);
     } finally {
@@ -344,7 +361,30 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
   };
 
+  const submitPmOrdersProducts = products.filter((product) => {
+    const requests = product.pm_code_requests || [];
+    const latestRequest = requests[requests.length - 1];
+    return latestRequest && latestRequest.status === 'PENDING_ARTWORK';
+  });
+
+  const updatePmCodesProducts = products.filter((product) => {
+    const requests = product.pm_code_requests || [];
+    const latestRequest = requests[requests.length - 1];
+    return !latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL');
+  });
+
   const filteredProducts = products.filter((product) => {
+    const requests = product.pm_code_requests || [];
+    const latestRequest = requests[requests.length - 1];
+
+    if (user?.department === 'Artwork') {
+      if (activeTab === 'submit_pm_orders') {
+        if (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') return false;
+      } else if (activeTab === 'update_pm_codes') {
+        if (latestRequest && (latestRequest.status === 'PENDING_ARTWORK' || latestRequest.status === 'AWAITING_REGULATORY_APPROVAL')) return false;
+      }
+    }
+
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -358,6 +398,15 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     );
   });
 
+  const getPanelTitle = () => {
+    if (user?.department === 'Artwork') {
+      if (activeTab === 'submit_pm_orders') return 'Submit PM Code Orders';
+      if (activeTab === 'update_pm_codes') return 'Update PM Codes';
+      return 'All Products';
+    }
+    return 'Products';
+  };
+
   if (loading) {
     return <div className="loading">Loading products...</div>;
   }
@@ -367,8 +416,8 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
       <Header user={user} onLogout={onLogout} />
 
       <div className="panel">
-        <div className="panel-header">
-          <h2>Products</h2>
+        <div className="panel-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
+          <h2>{getPanelTitle()}</h2>
           {/* Only show "Add Product" for Regulatory department */}
           {user.department === 'Regulatory' && (
             <button className="submit-button" onClick={handleAddProductClick}>
@@ -376,6 +425,103 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
             </button>
           )}
         </div>
+
+        {/* PM Code Filter Tabs - Only shown for Artwork department */}
+        {user?.department === 'Artwork' && (
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <button
+              type="button"
+              onClick={() => handleTabChange('submit_pm_orders')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '14px',
+                border: activeTab === 'submit_pm_orders' ? '2px solid #ea580c' : '1px solid #cbd5e1',
+                backgroundColor: activeTab === 'submit_pm_orders' ? '#fff7ed' : '#ffffff',
+                color: activeTab === 'submit_pm_orders' ? '#c2410c' : '#475569',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: activeTab === 'submit_pm_orders' ? '0 1px 3px rgba(234,88,12,0.2)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>Submit PM Code Orders</span>
+              <span style={{
+                background: activeTab === 'submit_pm_orders' ? '#ea580c' : '#e2e8f0',
+                color: activeTab === 'submit_pm_orders' ? '#ffffff' : '#475569',
+                borderRadius: '12px',
+                padding: '2px 8px',
+                fontSize: '12px'
+              }}>
+                {submitPmOrdersProducts.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange('update_pm_codes')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '14px',
+                border: activeTab === 'update_pm_codes' ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                backgroundColor: activeTab === 'update_pm_codes' ? '#f0f9ff' : '#ffffff',
+                color: activeTab === 'update_pm_codes' ? '#0369a1' : '#475569',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: activeTab === 'update_pm_codes' ? '0 1px 3px rgba(2,132,199,0.2)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>Update PM Codes</span>
+              <span style={{
+                background: activeTab === 'update_pm_codes' ? '#0284c7' : '#e2e8f0',
+                color: activeTab === 'update_pm_codes' ? '#ffffff' : '#475569',
+                borderRadius: '12px',
+                padding: '2px 8px',
+                fontSize: '12px'
+              }}>
+                {updatePmCodesProducts.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange('all')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '14px',
+                border: activeTab === 'all' ? '2px solid #475569' : '1px solid #cbd5e1',
+                backgroundColor: activeTab === 'all' ? '#f1f5f9' : '#ffffff',
+                color: activeTab === 'all' ? '#0f172a' : '#475569',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>All Products</span>
+              <span style={{
+                background: activeTab === 'all' ? '#475569' : '#e2e8f0',
+                color: activeTab === 'all' ? '#ffffff' : '#475569',
+                borderRadius: '12px',
+                padding: '2px 8px',
+                fontSize: '12px'
+              }}>
+                {products.length}
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* Desktop Table View */}
         <div className="table-container">
@@ -397,7 +543,18 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.map((product) => {
+              {filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: '35px', color: '#64748b', fontSize: '15px' }}>
+                    {activeTab === 'submit_pm_orders'
+                      ? 'No PM Code Orders currently awaiting Artwork submission.'
+                      : activeTab === 'update_pm_codes'
+                      ? 'No products available for PM Code updates.'
+                      : 'No products found matching the criteria.'}
+                  </td>
+                </tr>
+              ) : (
+                filteredProducts.map((product) => {
                 const requests = product.pm_code_requests || [];
                 const latestRequest = requests[requests.length - 1];
                 const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
@@ -532,7 +689,8 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>

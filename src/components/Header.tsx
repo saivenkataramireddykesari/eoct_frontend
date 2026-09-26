@@ -111,7 +111,10 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
 
   const navItems = user.department === 'Artwork'
     ? [
-        { path: '/products', label: 'Products' },
+        { path: '/products?tab=submit_pm_orders', label: 'Submit PM Code Orders' },
+        { path: '/products?tab=update_pm_codes', label: 'Update PM Codes' },
+        { path: '/products?tab=all', label: 'All Products' },
+        { path: '/orders', label: 'Orders' },
         { path: '/alerts', label: 'Alerts' },
       ]
     : user.department === 'Regulatory'
@@ -149,6 +152,14 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
   const handleNavClick = (path: string) => {
     navigate(path);
     setMobileMenuOpen(false);
+  };
+
+  const isNavItemActive = (itemPath: string) => {
+    const currentFullPath = location.pathname + location.search;
+    if (currentFullPath === itemPath) return true;
+    if (itemPath === '/products?tab=submit_pm_orders' && (location.pathname === '/products' && (!location.search || location.search === '?tab=submit_pm_orders'))) return true;
+    if (location.pathname === itemPath && !itemPath.includes('?')) return true;
+    return false;
   };
 
   return (
@@ -208,7 +219,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
           {navItems.map((item) => (
             <button
               key={item.path}
-              className={`nav-button ${location.pathname === item.path ? 'active' : ''}`}
+              className={`nav-button ${isNavItemActive(item.path) ? 'active' : ''}`}
               onClick={() => handleNavClick(item.path)}
             >
               {item.label}

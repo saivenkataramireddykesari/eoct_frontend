@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { orderAPI } from '../services/api';
+import { orderAPI, productAPI } from '../services/api';
 import Header from './Header';
 import { formatDate } from '../utils/dateUtils';
 
@@ -97,6 +97,82 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     { value: 'DELIVERED', label: 'Delivered' },
   ];
 
+  const handleRequestPmCode = async (e: React.MouseEvent, order: any) => {
+    e.stopPropagation();
+    const sku = order.sku || order.product?.sku_code;
+    if (!sku) {
+      alert('SKU is not available for this order.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await productAPI.requestPmCode(sku);
+      alert(`PM Code request submitted successfully for SKU: ${sku}`);
+      await fetchOrders(page);
+    } catch (error: any) {
+      console.error('Error requesting PM Code:', error);
+      alert(
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        'Failed to request PM Code.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderPmCodeAction = (order: any) => {
+    const product = order.product;
+    const sku = order.sku || product?.sku_code;
+    const primaryPmCode = product?.primary_pm_code;
+    const requests = product?.pm_code_requests || [];
+    const latestRequest = requests.length > 0 ? requests[requests.length - 1] : null;
+    const artworkStatus = product?.artwork_status;
+
+    if (primaryPmCode) {
+      return (
+        <span style={{ fontWeight: 600, color: '#2e7d32', fontSize: '0.88rem' }}>
+          {primaryPmCode}
+        </span>
+      );
+    }
+
+    if (latestRequest) {
+      if (latestRequest.status === 'PENDING_ARTWORK') {
+        return (
+          <span className="status-badge status-hold" style={{ fontSize: '0.8rem' }}>
+            Awaiting Artwork
+          </span>
+        );
+      }
+      if (latestRequest.status === 'AWAITING_REGULATORY_APPROVAL') {
+        return (
+          <span className="status-badge status-new" style={{ fontSize: '0.8rem' }}>
+            Awaiting Approval
+          </span>
+        );
+      }
+    }
+
+    const isRegulatory = user?.department === 'Regulatory';
+    const showGetButton = isRegulatory && !!sku && artworkStatus !== 'Available' && (!latestRequest || latestRequest.status === 'APPROVED' || latestRequest.status === 'REJECTED');
+
+    if (showGetButton) {
+      return (
+        <button
+          className="submit-button"
+          style={{ padding: '4px 10px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          onClick={(e) => handleRequestPmCode(e, order)}
+        >
+          Get PM Code
+        </button>
+      );
+    }
+
+    return '—';
+  };
+
   const filteredOrders = orders.filter((order) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
@@ -177,6 +253,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                 <th>Status</th>
                 <th>Compliance</th>
                 <th>Price</th>
+                <th>PM Code</th>
                 <th>Created</th>
               </tr>
             </thead>
@@ -209,6 +286,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                     </span>
                   </td>
                   <td>{order.price}</td>
+                  <td>{renderPmCodeAction(order)}</td>
                   <td>{formatDate(order.created_at)}</td>
                 </tr>
               ))}
@@ -277,6 +355,12 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   >
                     {order.compliance_status || 'PENDING'}
                   </span>
+                </span>
+              </div>
+              <div className="mobile-card-row">
+                <span className="mobile-card-label">PM Code</span>
+                <span className="mobile-card-value" onClick={(e) => e.stopPropagation()}>
+                  {renderPmCodeAction(order)}
                 </span>
               </div>
               <div className="mobile-card-row">
