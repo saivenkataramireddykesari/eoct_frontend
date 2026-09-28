@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse, FullSearchResultItem, FullSearchResponse } from "../shared-types";
 import { IOrderCreate } from "../types";
 
-const API_URL = 'https://eoct-backend.onrender.com/api'; // Temporarily changed for local testing
+const API_URL = process.env.REACT_APP_API_URL || 'https://eoct-backend.onrender.com/api';
 
 // 
 
