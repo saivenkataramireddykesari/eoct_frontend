@@ -479,31 +479,49 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
 
   const handleMilestoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!milestoneData.status) {
       alert('Please select a status before submitting.');
       return;
     }
+
     if (!milestoneData.remarks || !milestoneData.remarks.trim()) {
       alert('Remarks are mandatory when updating a milestone.');
       return;
     }
+
     try {
+      // IMPORTANT:
+      // Target date is managed separately through SCM "Set Target Dates".
+      // Do NOT send target_date when updating a milestone.
       const dataToSend = {
-        ...milestoneData,
-        target_date: milestoneData.target_date || null, // Convert empty string to null
-        actual_date: milestoneData.actual_date || null, // Convert empty string to null
+        status: milestoneData.status,
+        actual_date: milestoneData.actual_date || null,
         remarks: milestoneData.remarks.trim(),
       };
+
       console.log('Sending milestone update data:', dataToSend);
 
       // Find real milestone ID if virtual item was selected
       let realId = selectedMilestone!.id;
-      if (typeof realId === 'string' && realId.startsWith('virtual-')) {
-        const foundReal = (order?.milestones || []).find((m: IMilestone) => {
-          if (!m?.name) return false;
-          const normName = m.name === 'PM Procurement Released' ? 'PO Released' : m.name.trim();
-          return normName === selectedMilestone!.name;
-        });
+
+      if (
+        typeof realId === 'string' &&
+        realId.startsWith('virtual-')
+      ) {
+        const foundReal = (order?.milestones || []).find(
+          (m: IMilestone) => {
+            if (!m?.name) return false;
+
+            const normName =
+              m.name === 'PM Procurement Released'
+                ? 'PO Released'
+                : m.name.trim();
+
+            return normName === selectedMilestone!.name;
+          }
+        );
+
         if (foundReal) {
           realId = foundReal.id;
         } else {
@@ -512,20 +530,32 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
         }
       }
 
-      if (typeof realId !== 'number') { // Added check
+      if (typeof realId !== 'number') {
         alert('Cannot update milestone with a non-numeric ID.');
         return;
       }
+
       const response = await orderAPI.updateMilestone(
         realId,
         dataToSend
       );
-      console.log('Milestone update response:', response.data);
+
+      console.log(
+        'Milestone update response:',
+        response.data
+      );
+
       setMilestoneModal(false);
-      fetchOrder();
+
+      await fetchOrder();
+
     } catch (error: any) {
       console.error('Error updating milestone:', error);
-      alert(error.response?.data?.detail || 'Failed to update milestone');
+
+      alert(
+        error.response?.data?.detail ||
+        'Failed to update milestone'
+      );
     }
   };
 
