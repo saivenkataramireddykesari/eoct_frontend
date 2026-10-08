@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { customerAPI, productAPI } from '../services/api';
 import { Customer, Country } from '../shared-types';
+import { useExcelTableFilter } from './useExcelTableFilter';
+import { ExcelHeaderCell, ExcelActiveFiltersBar } from './ExcelHeaderCell';
 
 interface User {
   id: number;
@@ -100,6 +102,24 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
     }
   };
 
+  const columnAccessors = useMemo(() => ({
+    id: (c: Customer) => c.id ?? '-',
+    name: (c: Customer) => c.customer_name || '-',
+    country: (c: Customer) => c.country?.name || '-',
+  }), []);
+
+  const {
+    filteredAndSortedData: excelFilteredCustomers,
+    filterState,
+    sortState,
+    uniqueValuesMap,
+    setColumnFilter,
+    handleSort,
+    clearColumnFilter,
+    clearAllFilters,
+    activeFilterCount,
+  } = useExcelTableFilter(customers, columnAccessors);
+
   if (loading) {
     return <div>Loading customers...</div>;
   }
@@ -133,20 +153,60 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
       </div>
 
       <h3>Customer List</h3>
+
+      <ExcelActiveFiltersBar
+        activeCount={activeFilterCount}
+        isSorted={!!sortState.direction}
+        onClearAll={clearAllFilters}
+      />
+
       {customers.length === 0 ? (
         <p>No customers found.</p>
       ) : (
-        <table>
+        <table className="data-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Country</th>
+              <th>
+                <ExcelHeaderCell
+                  columnKey="id"
+                  label="ID"
+                  uniqueValues={uniqueValuesMap.id}
+                  selectedValues={filterState.id}
+                  sortDirection={sortState.columnKey === 'id' ? sortState.direction : null}
+                  onFilterChange={(sel) => setColumnFilter('id', sel)}
+                  onSortChange={(dir) => handleSort('id', dir)}
+                  onClearFilter={() => clearColumnFilter('id')}
+                />
+              </th>
+              <th>
+                <ExcelHeaderCell
+                  columnKey="name"
+                  label="Name"
+                  uniqueValues={uniqueValuesMap.name}
+                  selectedValues={filterState.name}
+                  sortDirection={sortState.columnKey === 'name' ? sortState.direction : null}
+                  onFilterChange={(sel) => setColumnFilter('name', sel)}
+                  onSortChange={(dir) => handleSort('name', dir)}
+                  onClearFilter={() => clearColumnFilter('name')}
+                />
+              </th>
+              <th>
+                <ExcelHeaderCell
+                  columnKey="country"
+                  label="Country"
+                  uniqueValues={uniqueValuesMap.country}
+                  selectedValues={filterState.country}
+                  sortDirection={sortState.columnKey === 'country' ? sortState.direction : null}
+                  onFilterChange={(sel) => setColumnFilter('country', sel)}
+                  onSortChange={(dir) => handleSort('country', dir)}
+                  onClearFilter={() => clearColumnFilter('country')}
+                />
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {customers.map((customer) => (
+            {excelFilteredCustomers.map((customer) => (
               <tr key={customer.id}>
                 <td>{customer.id}</td>
                 <td>{customer.customer_name}</td>

@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { productAPI, customerAPI } from '../services/api';
 import Header from './Header';
 import { Country, Customer } from '../shared-types';
 import { formatDateTime } from '../utils/dateUtils';
+import { useExcelTableFilter } from './useExcelTableFilter';
+import { ExcelHeaderCell, ExcelActiveFiltersBar } from './ExcelHeaderCell';
 
 interface ProductsProps {
   user: any;
@@ -398,6 +400,40 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     );
   });
 
+  const columnAccessors = useMemo(() => ({
+    sku_code: (p: any) => p.sku_code || '-',
+    product_name: (p: any) => p.product_name || '-',
+    country: (p: any) => p.country?.name || '-',
+    customer: (p: any) => p.customer || '-',
+    pack_size: (p: any) => p.pack_size || '-',
+    pm_code: (p: any) => p.primary_pm_code || '-',
+    artwork_status: (p: any) => p.artwork_status || '-',
+    pm_request_status: (p: any) => {
+      const requests = p.pm_code_requests || [];
+      const latestRequest = requests[requests.length - 1];
+      if (!latestRequest) return '—';
+      switch (latestRequest.status) {
+        case 'PENDING_ARTWORK': return 'Awaiting Artwork PM Code';
+        case 'AWAITING_REGULATORY_APPROVAL': return 'Awaiting Regulatory Approval';
+        case 'APPROVED': return 'Approved';
+        case 'REJECTED': return 'Rejected';
+        default: return latestRequest.status;
+      }
+    },
+  }), []);
+
+  const {
+    filteredAndSortedData: excelFilteredProducts,
+    filterState,
+    sortState,
+    uniqueValuesMap,
+    setColumnFilter,
+    handleSort,
+    clearColumnFilter,
+    clearAllFilters,
+    activeFilterCount,
+  } = useExcelTableFilter(filteredProducts, columnAccessors);
+
   const getPanelTitle = () => {
     if (user?.department === 'Artwork') {
       if (activeTab === 'submit_pm_orders') return 'Submit PM Code Orders';
@@ -523,27 +559,119 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
           </div>
         )}
 
+        <ExcelActiveFiltersBar
+          activeCount={activeFilterCount}
+          isSorted={!!sortState.direction}
+          onClearAll={clearAllFilters}
+        />
+
         {/* Desktop Table View */}
         <div className="table-container">
           <table className="data-table">
             <thead>
               <tr>
-                <th>SKU Code</th>
-                <th>Product Name</th>
-                <th>Country</th>
-                <th>Customer</th>
-                <th>Pack Size</th>
-                {/* <th>Batch Size</th> */}
-                {/* <th>MOQ</th> */}
-                <th>PM Code</th>
-                <th>Artwork Status</th>
-                <th>PM Request Status</th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="sku_code"
+                    label="SKU Code"
+                    uniqueValues={uniqueValuesMap.sku_code}
+                    selectedValues={filterState.sku_code}
+                    sortDirection={sortState.columnKey === 'sku_code' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('sku_code', sel)}
+                    onSortChange={(dir) => handleSort('sku_code', dir)}
+                    onClearFilter={() => clearColumnFilter('sku_code')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="product_name"
+                    label="Product Name"
+                    uniqueValues={uniqueValuesMap.product_name}
+                    selectedValues={filterState.product_name}
+                    sortDirection={sortState.columnKey === 'product_name' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('product_name', sel)}
+                    onSortChange={(dir) => handleSort('product_name', dir)}
+                    onClearFilter={() => clearColumnFilter('product_name')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="country"
+                    label="Country"
+                    uniqueValues={uniqueValuesMap.country}
+                    selectedValues={filterState.country}
+                    sortDirection={sortState.columnKey === 'country' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('country', sel)}
+                    onSortChange={(dir) => handleSort('country', dir)}
+                    onClearFilter={() => clearColumnFilter('country')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="customer"
+                    label="Customer"
+                    uniqueValues={uniqueValuesMap.customer}
+                    selectedValues={filterState.customer}
+                    sortDirection={sortState.columnKey === 'customer' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('customer', sel)}
+                    onSortChange={(dir) => handleSort('customer', dir)}
+                    onClearFilter={() => clearColumnFilter('customer')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="pack_size"
+                    label="Pack Size"
+                    uniqueValues={uniqueValuesMap.pack_size}
+                    selectedValues={filterState.pack_size}
+                    sortDirection={sortState.columnKey === 'pack_size' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('pack_size', sel)}
+                    onSortChange={(dir) => handleSort('pack_size', dir)}
+                    onClearFilter={() => clearColumnFilter('pack_size')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="pm_code"
+                    label="PM Code"
+                    uniqueValues={uniqueValuesMap.pm_code}
+                    selectedValues={filterState.pm_code}
+                    sortDirection={sortState.columnKey === 'pm_code' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('pm_code', sel)}
+                    onSortChange={(dir) => handleSort('pm_code', dir)}
+                    onClearFilter={() => clearColumnFilter('pm_code')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="artwork_status"
+                    label="Artwork Status"
+                    uniqueValues={uniqueValuesMap.artwork_status}
+                    selectedValues={filterState.artwork_status}
+                    sortDirection={sortState.columnKey === 'artwork_status' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('artwork_status', sel)}
+                    onSortChange={(dir) => handleSort('artwork_status', dir)}
+                    onClearFilter={() => clearColumnFilter('artwork_status')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="pm_request_status"
+                    label="PM Request Status"
+                    uniqueValues={uniqueValuesMap.pm_request_status}
+                    selectedValues={filterState.pm_request_status}
+                    sortDirection={sortState.columnKey === 'pm_request_status' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('pm_request_status', sel)}
+                    onSortChange={(dir) => handleSort('pm_request_status', dir)}
+                    onClearFilter={() => clearColumnFilter('pm_request_status')}
+                  />
+                </th>
                 <th>History</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.length === 0 ? (
+              {excelFilteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={10} style={{ textAlign: 'center', padding: '35px', color: '#64748b', fontSize: '15px' }}>
                     {activeTab === 'submit_pm_orders'
@@ -554,7 +682,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((product) => {
+                excelFilteredProducts.map((product) => {
                 const requests = product.pm_code_requests || [];
                 const latestRequest = requests[requests.length - 1];
                 const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
@@ -697,7 +825,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {filteredProducts.map((product) => {
+          {excelFilteredProducts.map((product) => {
             const requests = product.pm_code_requests || [];
             const latestRequest = requests[requests.length - 1];
             const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');

@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { productAPI, orderAPI, formatErrorMessage } from '../services/api';
 import Header from './Header';
 import { formatDate, formatDateTime } from '../utils/dateUtils';
+import { useExcelTableFilter } from './useExcelTableFilter';
+import { ExcelHeaderCell, ExcelActiveFiltersBar } from './ExcelHeaderCell';
 
 interface ProductDetailProps {
   user: any;
@@ -357,112 +359,300 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ user, onLogout }) => {
         </div>
 
         {/* PM Code Request & Action History Section */}
-        <div style={{ marginBottom: '32px' }}>
-          <h3 style={{ margin: '0 0 16px 0', color: '#334155', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>
-            📜 PM Code Workflow History
-          </h3>
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Date & Time</th>
-                  <th>Department</th>
-                  <th>Action / Workflow Transition</th>
-                  <th>PM Code</th>
-                  <th>Remarks</th>
-                  <th>Response Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allTransactions.map((tx: any) => (
-                  <tr key={tx.id}>
-                    <td>{formatDateTime(tx.created_at)}</td>
-                    <td>
-                      <span className={`status-badge ${tx.action_by_dept === 'Regulatory' ? 'status-new' : 'status-execution'}`}>
-                        {tx.action_by_dept}
-                      </span>
-                    </td>
-                    <td>
-                      {tx.from_state ? (
-                        <span>{tx.from_state} ➔ {tx.to_state}</span>
-                      ) : (
-                        <span>Created ➔ {tx.to_state}</span>
-                      )}
-                    </td>
-                    <td>{tx.primary_pm_code || tx.pm_code || '—'}</td>
-                    <td>{tx.remarks || '—'}</td>
-                    <td>
-                      {tx.response_time_days > 0 ? (
-                        <span style={{ fontWeight: 'bold', color: '#e65100' }}>
-                          {tx.response_time_days} day(s)
-                        </span>
-                      ) : (
-                        <span style={{ color: '#94a3b8' }}>&lt; 1 day</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {allTransactions.length === 0 && (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
-                      No workflow history recorded for this product yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {(() => {
+          const historyAccessors = {
+            created_at: (tx: any) => formatDateTime(tx.created_at),
+            dept: (tx: any) => tx.action_by_dept || '-',
+            transition: (tx: any) => tx.from_state ? `${tx.from_state} ➔ ${tx.to_state}` : `Created ➔ ${tx.to_state}`,
+            pm_code: (tx: any) => tx.primary_pm_code || tx.pm_code || '—',
+            remarks: (tx: any) => tx.remarks || '—',
+            response_time: (tx: any) => tx.response_time_days > 0 ? `${tx.response_time_days} day(s)` : '< 1 day',
+          };
+
+          const historyExcel = useExcelTableFilter(allTransactions, historyAccessors);
+
+          return (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#334155', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>
+                📜 PM Code Workflow History
+              </h3>
+
+              <ExcelActiveFiltersBar
+                activeCount={historyExcel.activeFilterCount}
+                isSorted={!!historyExcel.sortState.direction}
+                onClearAll={historyExcel.clearAllFilters}
+              />
+
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="created_at"
+                          label="Date & Time"
+                          uniqueValues={historyExcel.uniqueValuesMap.created_at}
+                          selectedValues={historyExcel.filterState.created_at}
+                          sortDirection={historyExcel.sortState.columnKey === 'created_at' ? historyExcel.sortState.direction : null}
+                          onFilterChange={(sel) => historyExcel.setColumnFilter('created_at', sel)}
+                          onSortChange={(dir) => historyExcel.handleSort('created_at', dir)}
+                          onClearFilter={() => historyExcel.clearColumnFilter('created_at')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="dept"
+                          label="Department"
+                          uniqueValues={historyExcel.uniqueValuesMap.dept}
+                          selectedValues={historyExcel.filterState.dept}
+                          sortDirection={historyExcel.sortState.columnKey === 'dept' ? historyExcel.sortState.direction : null}
+                          onFilterChange={(sel) => historyExcel.setColumnFilter('dept', sel)}
+                          onSortChange={(dir) => historyExcel.handleSort('dept', dir)}
+                          onClearFilter={() => historyExcel.clearColumnFilter('dept')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="transition"
+                          label="Action / Workflow Transition"
+                          uniqueValues={historyExcel.uniqueValuesMap.transition}
+                          selectedValues={historyExcel.filterState.transition}
+                          sortDirection={historyExcel.sortState.columnKey === 'transition' ? historyExcel.sortState.direction : null}
+                          onFilterChange={(sel) => historyExcel.setColumnFilter('transition', sel)}
+                          onSortChange={(dir) => historyExcel.handleSort('transition', dir)}
+                          onClearFilter={() => historyExcel.clearColumnFilter('transition')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="pm_code"
+                          label="PM Code"
+                          uniqueValues={historyExcel.uniqueValuesMap.pm_code}
+                          selectedValues={historyExcel.filterState.pm_code}
+                          sortDirection={historyExcel.sortState.columnKey === 'pm_code' ? historyExcel.sortState.direction : null}
+                          onFilterChange={(sel) => historyExcel.setColumnFilter('pm_code', sel)}
+                          onSortChange={(dir) => historyExcel.handleSort('pm_code', dir)}
+                          onClearFilter={() => historyExcel.clearColumnFilter('pm_code')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="remarks"
+                          label="Remarks"
+                          uniqueValues={historyExcel.uniqueValuesMap.remarks}
+                          selectedValues={historyExcel.filterState.remarks}
+                          sortDirection={historyExcel.sortState.columnKey === 'remarks' ? historyExcel.sortState.direction : null}
+                          onFilterChange={(sel) => historyExcel.setColumnFilter('remarks', sel)}
+                          onSortChange={(dir) => historyExcel.handleSort('remarks', dir)}
+                          onClearFilter={() => historyExcel.clearColumnFilter('remarks')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="response_time"
+                          label="Response Time"
+                          uniqueValues={historyExcel.uniqueValuesMap.response_time}
+                          selectedValues={historyExcel.filterState.response_time}
+                          sortDirection={historyExcel.sortState.columnKey === 'response_time' ? historyExcel.sortState.direction : null}
+                          onFilterChange={(sel) => historyExcel.setColumnFilter('response_time', sel)}
+                          onSortChange={(dir) => historyExcel.handleSort('response_time', dir)}
+                          onClearFilter={() => historyExcel.clearColumnFilter('response_time')}
+                        />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyExcel.filteredAndSortedData.map((tx: any) => (
+                      <tr key={tx.id}>
+                        <td>{formatDateTime(tx.created_at)}</td>
+                        <td>
+                          <span className={`status-badge ${tx.action_by_dept === 'Regulatory' ? 'status-new' : 'status-execution'}`}>
+                            {tx.action_by_dept}
+                          </span>
+                        </td>
+                        <td>
+                          {tx.from_state ? (
+                            <span>{tx.from_state} ➔ {tx.to_state}</span>
+                          ) : (
+                            <span>Created ➔ {tx.to_state}</span>
+                          )}
+                        </td>
+                        <td>{tx.primary_pm_code || tx.pm_code || '—'}</td>
+                        <td>{tx.remarks || '—'}</td>
+                        <td>
+                          {tx.response_time_days > 0 ? (
+                            <span style={{ fontWeight: 'bold', color: '#e65100' }}>
+                              {tx.response_time_days} day(s)
+                            </span>
+                          ) : (
+                            <span style={{ color: '#94a3b8' }}>&lt; 1 day</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {historyExcel.filteredAndSortedData.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          No workflow history recorded for this product.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Associated Orders for this Product */}
-        <div>
-          <h3 style={{ margin: '0 0 16px 0', color: '#334155', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>
-            🛒 Associated Orders ({orders.length})
-          </h3>
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Order ID</th>
-                  <th>Order Number</th>
-                  <th>Customer</th>
-                  <th>Quantity</th>
-                  <th>Delivery Date</th>
-                  <th>Status</th>
-                  <th>Compliance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((o: any) => (
-                  <tr
-                    key={o.id}
-                    onClick={() => navigate(`/orders/${o.id}`)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td><strong>{o.order_id}</strong></td>
-                    <td>{o.order_number}</td>
-                    <td>{o.customer?.customer_name}</td>
-                    <td>{o.quantity}</td>
-                    <td>{formatDate(o.requested_delivery_date)}</td>
-                    <td><span className="status-badge status-pending">{o.status}</span></td>
-                    <td>
-                      <span className={`status-badge ${o.compliance_status === 'PASSED' ? 'status-accepted' : 'status-risk'}`}>
-                        {o.compliance_status || 'PENDING'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {orders.length === 0 && (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
-                      No active orders associated with this product SKU.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {(() => {
+          const orderAccessors = {
+            order_id: (o: any) => o.order_id || '-',
+            order_number: (o: any) => o.order_number || '-',
+            customer: (o: any) => o.customer?.customer_name || '-',
+            quantity: (o: any) => o.quantity ?? '-',
+            delivery_date: (o: any) => formatDate(o.requested_delivery_date),
+            status: (o: any) => o.status || '-',
+            compliance: (o: any) => o.compliance_status || 'PENDING',
+          };
+
+          const orderExcel = useExcelTableFilter(orders, orderAccessors);
+
+          return (
+            <div>
+              <h3 style={{ margin: '0 0 16px 0', color: '#334155', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px' }}>
+                🛒 Associated Orders ({orders.length})
+              </h3>
+
+              <ExcelActiveFiltersBar
+                activeCount={orderExcel.activeFilterCount}
+                isSorted={!!orderExcel.sortState.direction}
+                onClearAll={orderExcel.clearAllFilters}
+              />
+
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="order_id"
+                          label="Order ID"
+                          uniqueValues={orderExcel.uniqueValuesMap.order_id}
+                          selectedValues={orderExcel.filterState.order_id}
+                          sortDirection={orderExcel.sortState.columnKey === 'order_id' ? orderExcel.sortState.direction : null}
+                          onFilterChange={(sel) => orderExcel.setColumnFilter('order_id', sel)}
+                          onSortChange={(dir) => orderExcel.handleSort('order_id', dir)}
+                          onClearFilter={() => orderExcel.clearColumnFilter('order_id')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="order_number"
+                          label="Order Number"
+                          uniqueValues={orderExcel.uniqueValuesMap.order_number}
+                          selectedValues={orderExcel.filterState.order_number}
+                          sortDirection={orderExcel.sortState.columnKey === 'order_number' ? orderExcel.sortState.direction : null}
+                          onFilterChange={(sel) => orderExcel.setColumnFilter('order_number', sel)}
+                          onSortChange={(dir) => orderExcel.handleSort('order_number', dir)}
+                          onClearFilter={() => orderExcel.clearColumnFilter('order_number')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="customer"
+                          label="Customer"
+                          uniqueValues={orderExcel.uniqueValuesMap.customer}
+                          selectedValues={orderExcel.filterState.customer}
+                          sortDirection={orderExcel.sortState.columnKey === 'customer' ? orderExcel.sortState.direction : null}
+                          onFilterChange={(sel) => orderExcel.setColumnFilter('customer', sel)}
+                          onSortChange={(dir) => orderExcel.handleSort('customer', dir)}
+                          onClearFilter={() => orderExcel.clearColumnFilter('customer')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="quantity"
+                          label="Quantity"
+                          uniqueValues={orderExcel.uniqueValuesMap.quantity}
+                          selectedValues={orderExcel.filterState.quantity}
+                          sortDirection={orderExcel.sortState.columnKey === 'quantity' ? orderExcel.sortState.direction : null}
+                          onFilterChange={(sel) => orderExcel.setColumnFilter('quantity', sel)}
+                          onSortChange={(dir) => orderExcel.handleSort('quantity', dir)}
+                          onClearFilter={() => orderExcel.clearColumnFilter('quantity')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="delivery_date"
+                          label="Delivery Date"
+                          uniqueValues={orderExcel.uniqueValuesMap.delivery_date}
+                          selectedValues={orderExcel.filterState.delivery_date}
+                          sortDirection={orderExcel.sortState.columnKey === 'delivery_date' ? orderExcel.sortState.direction : null}
+                          onFilterChange={(sel) => orderExcel.setColumnFilter('delivery_date', sel)}
+                          onSortChange={(dir) => orderExcel.handleSort('delivery_date', dir)}
+                          onClearFilter={() => orderExcel.clearColumnFilter('delivery_date')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="status"
+                          label="Status"
+                          uniqueValues={orderExcel.uniqueValuesMap.status}
+                          selectedValues={orderExcel.filterState.status}
+                          sortDirection={orderExcel.sortState.columnKey === 'status' ? orderExcel.sortState.direction : null}
+                          onFilterChange={(sel) => orderExcel.setColumnFilter('status', sel)}
+                          onSortChange={(dir) => orderExcel.handleSort('status', dir)}
+                          onClearFilter={() => orderExcel.clearColumnFilter('status')}
+                        />
+                      </th>
+                      <th>
+                        <ExcelHeaderCell
+                          columnKey="compliance"
+                          label="Compliance"
+                          uniqueValues={orderExcel.uniqueValuesMap.compliance}
+                          selectedValues={orderExcel.filterState.compliance}
+                          sortDirection={orderExcel.sortState.columnKey === 'compliance' ? orderExcel.sortState.direction : null}
+                          onFilterChange={(sel) => orderExcel.setColumnFilter('compliance', sel)}
+                          onSortChange={(dir) => orderExcel.handleSort('compliance', dir)}
+                          onClearFilter={() => orderExcel.clearColumnFilter('compliance')}
+                        />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderExcel.filteredAndSortedData.map((o: any) => (
+                      <tr
+                        key={o.id}
+                        onClick={() => navigate(`/orders/${o.id}`)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td><strong>{o.order_id}</strong></td>
+                        <td>{o.order_number}</td>
+                        <td>{o.customer?.customer_name}</td>
+                        <td>{o.quantity}</td>
+                        <td>{formatDate(o.requested_delivery_date)}</td>
+                        <td><span className="status-badge status-pending">{o.status}</span></td>
+                        <td>
+                          <span className={`status-badge ${o.compliance_status === 'PASSED' ? 'status-accepted' : 'status-risk'}`}>
+                            {o.compliance_status || 'PENDING'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {orderExcel.filteredAndSortedData.length === 0 && (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                          No active orders associated with this product SKU.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Update PM Code Modal */}

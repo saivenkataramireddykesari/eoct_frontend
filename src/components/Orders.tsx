@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { orderAPI, productAPI } from '../services/api';
 import Header from './Header';
 import { formatDate } from '../utils/dateUtils';
+import { useExcelTableFilter } from './useExcelTableFilter';
+import { ExcelHeaderCell, ExcelActiveFiltersBar } from './ExcelHeaderCell';
 
 interface OrdersProps {
   user: any;
@@ -187,6 +189,33 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     );
   });
 
+  const columnAccessors = useMemo(() => ({
+    order_number: (o: any) => o.order_number || '-',
+    customer: (o: any) => o.customer?.customer_name || '-',
+    country: (o: any) => o.country?.name || '-',
+    product_name: (o: any) => o.product?.product_name || o.product_name || '-',
+    category: (o: any) => o.product?.category || '-',
+    quantity: (o: any) => o.quantity ?? '-',
+    delivery_date: (o: any) => formatDate(o.requested_delivery_date),
+    status: (o: any) => o.status || '-',
+    compliance: (o: any) => o.compliance_status || 'PENDING',
+    price: (o: any) => o.price ?? '-',
+    pm_code: (o: any) => o.primary_pm_code || o.pm_code || '-',
+    created: (o: any) => formatDate(o.created_at),
+  }), []);
+
+  const {
+    filteredAndSortedData: excelFilteredOrders,
+    filterState,
+    sortState,
+    uniqueValuesMap,
+    setColumnFilter,
+    handleSort,
+    clearColumnFilter,
+    clearAllFilters,
+    activeFilterCount,
+  } = useExcelTableFilter(filteredOrders, columnAccessors);
+
   if (loading) {
     return <div className="loading">Loading orders...</div>;
   }
@@ -238,27 +267,165 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
           )}
         </div>
 
+        <ExcelActiveFiltersBar
+          activeCount={activeFilterCount}
+          isSorted={!!sortState.direction}
+          onClearAll={clearAllFilters}
+        />
+
         {/* Desktop Table View */}
         <div className="table-container">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Order Number</th>
-                <th>Customer</th>
-                <th>Country</th>
-                <th>Product Name</th>
-                <th>Manufacturing Unit</th>
-                <th>Quantity</th>
-                <th>Delivery Date</th>
-                <th>Status</th>
-                <th>Compliance</th>
-                <th>Price</th>
-                <th>PM Code</th>
-                <th>Created</th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="order_number"
+                    label="Order Number"
+                    uniqueValues={uniqueValuesMap.order_number}
+                    selectedValues={filterState.order_number}
+                    sortDirection={sortState.columnKey === 'order_number' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('order_number', sel)}
+                    onSortChange={(dir) => handleSort('order_number', dir)}
+                    onClearFilter={() => clearColumnFilter('order_number')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="customer"
+                    label="Customer"
+                    uniqueValues={uniqueValuesMap.customer}
+                    selectedValues={filterState.customer}
+                    sortDirection={sortState.columnKey === 'customer' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('customer', sel)}
+                    onSortChange={(dir) => handleSort('customer', dir)}
+                    onClearFilter={() => clearColumnFilter('customer')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="country"
+                    label="Country"
+                    uniqueValues={uniqueValuesMap.country}
+                    selectedValues={filterState.country}
+                    sortDirection={sortState.columnKey === 'country' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('country', sel)}
+                    onSortChange={(dir) => handleSort('country', dir)}
+                    onClearFilter={() => clearColumnFilter('country')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="product_name"
+                    label="Product Name"
+                    uniqueValues={uniqueValuesMap.product_name}
+                    selectedValues={filterState.product_name}
+                    sortDirection={sortState.columnKey === 'product_name' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('product_name', sel)}
+                    onSortChange={(dir) => handleSort('product_name', dir)}
+                    onClearFilter={() => clearColumnFilter('product_name')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="category"
+                    label="Manufacturing Unit"
+                    uniqueValues={uniqueValuesMap.category}
+                    selectedValues={filterState.category}
+                    sortDirection={sortState.columnKey === 'category' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('category', sel)}
+                    onSortChange={(dir) => handleSort('category', dir)}
+                    onClearFilter={() => clearColumnFilter('category')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="quantity"
+                    label="Quantity"
+                    uniqueValues={uniqueValuesMap.quantity}
+                    selectedValues={filterState.quantity}
+                    sortDirection={sortState.columnKey === 'quantity' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('quantity', sel)}
+                    onSortChange={(dir) => handleSort('quantity', dir)}
+                    onClearFilter={() => clearColumnFilter('quantity')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="delivery_date"
+                    label="Delivery Date"
+                    uniqueValues={uniqueValuesMap.delivery_date}
+                    selectedValues={filterState.delivery_date}
+                    sortDirection={sortState.columnKey === 'delivery_date' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('delivery_date', sel)}
+                    onSortChange={(dir) => handleSort('delivery_date', dir)}
+                    onClearFilter={() => clearColumnFilter('delivery_date')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="status"
+                    label="Status"
+                    uniqueValues={uniqueValuesMap.status}
+                    selectedValues={filterState.status}
+                    sortDirection={sortState.columnKey === 'status' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('status', sel)}
+                    onSortChange={(dir) => handleSort('status', dir)}
+                    onClearFilter={() => clearColumnFilter('status')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="compliance"
+                    label="Compliance"
+                    uniqueValues={uniqueValuesMap.compliance}
+                    selectedValues={filterState.compliance}
+                    sortDirection={sortState.columnKey === 'compliance' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('compliance', sel)}
+                    onSortChange={(dir) => handleSort('compliance', dir)}
+                    onClearFilter={() => clearColumnFilter('compliance')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="price"
+                    label="Price"
+                    uniqueValues={uniqueValuesMap.price}
+                    selectedValues={filterState.price}
+                    sortDirection={sortState.columnKey === 'price' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('price', sel)}
+                    onSortChange={(dir) => handleSort('price', dir)}
+                    onClearFilter={() => clearColumnFilter('price')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="pm_code"
+                    label="PM Code"
+                    uniqueValues={uniqueValuesMap.pm_code}
+                    selectedValues={filterState.pm_code}
+                    sortDirection={sortState.columnKey === 'pm_code' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('pm_code', sel)}
+                    onSortChange={(dir) => handleSort('pm_code', dir)}
+                    onClearFilter={() => clearColumnFilter('pm_code')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="created"
+                    label="Created"
+                    uniqueValues={uniqueValuesMap.created}
+                    selectedValues={filterState.created}
+                    sortDirection={sortState.columnKey === 'created' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('created', sel)}
+                    onSortChange={(dir) => handleSort('created', dir)}
+                    onClearFilter={() => clearColumnFilter('created')}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.map((order) => (
+              {excelFilteredOrders.map((order) => (
                 <tr
                   key={order.id}
                   onClick={() => navigate(`/orders/${order.id}`)}
@@ -296,7 +463,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {filteredOrders.map((order) => (
+          {excelFilteredOrders.map((order) => (
             <div
               key={order.id}
               className="mobile-card"

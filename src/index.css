@@ -1460,3 +1460,210 @@ textarea {
   }
 }
 
+
+/* ==================== EXCEL TABLE COLUMN FILTER STYLES ==================== */
+.excel-header-title {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.excel-filter-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 3px 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: all 0.15s ease;
+  color: #94a3b8;
+}
+
+.excel-filter-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.excel-filter-btn.active {
+  background: #dbeafe;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+.excel-filter-popup {
+  position: absolute;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: 12px;
+  width: 250px;
+  z-index: 99999;
+  font-family: inherit;
+  font-size: 13px;
+  color: #1e293b;
+  text-transform: none;
+}
+
+.excel-sort-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.excel-sort-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: #334155;
+}
+
+.excel-sort-option:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.excel-sort-option.active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.excel-clear-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: #dc2626;
+  margin-bottom: 4px;
+}
+
+.excel-clear-option:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.excel-clear-option:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.excel-divider {
+  border-bottom: 1px solid #e2e8f0;
+  margin: 6px 0 8px 0;
+}
+
+.excel-search-container {
+  margin-bottom: 8px;
+}
+
+.excel-filter-search {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.excel-filter-search:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.excel-filter-list {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 4px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+}
+
+.excel-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #334155;
+}
+
+.excel-filter-item:hover {
+  background: #e2e8f0;
+}
+
+.excel-filter-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.excel-filter-item input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+}
+
+.excel-popup-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.excel-btn-apply {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 5px 14px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.excel-btn-apply:hover {
+  background: #1d4ed8;
+}
+
+.excel-btn-cancel {
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.excel-btn-cancel:hover {
+  background: #f1f5f9;
+}

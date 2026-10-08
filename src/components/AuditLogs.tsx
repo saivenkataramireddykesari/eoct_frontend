@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { auditAPI } from '../services/api';
 import Header from './Header';
 import { formatDateTime } from '../utils/dateUtils';
+import { useExcelTableFilter } from './useExcelTableFilter';
+import { ExcelHeaderCell, ExcelActiveFiltersBar } from './ExcelHeaderCell';
 
 interface AuditLogsProps {
   user: any;
@@ -33,7 +35,6 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
     }
   };
 
-
   const getActionColor = (action: string) => {
     if (action.includes('CREATE')) return '#4caf50';
     if (action.includes('APPROVAL')) return '#2196f3';
@@ -42,6 +43,29 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
     if (action.includes('DELETE')) return '#9c27b0';
     return '#666';
   };
+
+  const columnAccessors = useMemo(() => ({
+    timestamp: (log: any) => formatDateTime(log.timestamp),
+    user_info: (log: any) => log.user ? `${log.user.name} (${log.user.employee_id})` : '-',
+    action: (log: any) => log.action || '-',
+    order_id: (log: any) => log.order?.order_id || log.order_id || '-',
+    previous_status: (log: any) => log.previous_status || '-',
+    new_status: (log: any) => log.new_status || '-',
+    remarks: (log: any) => log.remarks || '-',
+    ip_address: (log: any) => log.ip_address || '-',
+  }), []);
+
+  const {
+    filteredAndSortedData: excelFilteredLogs,
+    filterState,
+    sortState,
+    uniqueValuesMap,
+    setColumnFilter,
+    handleSort,
+    clearColumnFilter,
+    clearAllFilters,
+    activeFilterCount,
+  } = useExcelTableFilter(logs, columnAccessors);
 
   if (loading) {
     return <div className="loading">Loading audit logs...</div>;
@@ -54,23 +78,117 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
       <div className="panel">
         <h2>Audit Trail</h2>
 
+        <ExcelActiveFiltersBar
+          activeCount={activeFilterCount}
+          isSorted={!!sortState.direction}
+          onClearAll={clearAllFilters}
+        />
+
         {/* Desktop Table View */}
         <div className="table-container">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Timestamp</th>
-                <th>User</th>
-                <th>Action</th>
-                <th>Order ID</th>
-                <th>Previous Status</th>
-                <th>New Status</th>
-                <th>Remarks</th>
-                <th>IP Address</th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="timestamp"
+                    label="Timestamp"
+                    uniqueValues={uniqueValuesMap.timestamp}
+                    selectedValues={filterState.timestamp}
+                    sortDirection={sortState.columnKey === 'timestamp' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('timestamp', sel)}
+                    onSortChange={(dir) => handleSort('timestamp', dir)}
+                    onClearFilter={() => clearColumnFilter('timestamp')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="user_info"
+                    label="User"
+                    uniqueValues={uniqueValuesMap.user_info}
+                    selectedValues={filterState.user_info}
+                    sortDirection={sortState.columnKey === 'user_info' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('user_info', sel)}
+                    onSortChange={(dir) => handleSort('user_info', dir)}
+                    onClearFilter={() => clearColumnFilter('user_info')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="action"
+                    label="Action"
+                    uniqueValues={uniqueValuesMap.action}
+                    selectedValues={filterState.action}
+                    sortDirection={sortState.columnKey === 'action' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('action', sel)}
+                    onSortChange={(dir) => handleSort('action', dir)}
+                    onClearFilter={() => clearColumnFilter('action')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="order_id"
+                    label="Order ID"
+                    uniqueValues={uniqueValuesMap.order_id}
+                    selectedValues={filterState.order_id}
+                    sortDirection={sortState.columnKey === 'order_id' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('order_id', sel)}
+                    onSortChange={(dir) => handleSort('order_id', dir)}
+                    onClearFilter={() => clearColumnFilter('order_id')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="previous_status"
+                    label="Previous Status"
+                    uniqueValues={uniqueValuesMap.previous_status}
+                    selectedValues={filterState.previous_status}
+                    sortDirection={sortState.columnKey === 'previous_status' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('previous_status', sel)}
+                    onSortChange={(dir) => handleSort('previous_status', dir)}
+                    onClearFilter={() => clearColumnFilter('previous_status')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="new_status"
+                    label="New Status"
+                    uniqueValues={uniqueValuesMap.new_status}
+                    selectedValues={filterState.new_status}
+                    sortDirection={sortState.columnKey === 'new_status' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('new_status', sel)}
+                    onSortChange={(dir) => handleSort('new_status', dir)}
+                    onClearFilter={() => clearColumnFilter('new_status')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="remarks"
+                    label="Remarks"
+                    uniqueValues={uniqueValuesMap.remarks}
+                    selectedValues={filterState.remarks}
+                    sortDirection={sortState.columnKey === 'remarks' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('remarks', sel)}
+                    onSortChange={(dir) => handleSort('remarks', dir)}
+                    onClearFilter={() => clearColumnFilter('remarks')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="ip_address"
+                    label="IP Address"
+                    uniqueValues={uniqueValuesMap.ip_address}
+                    selectedValues={filterState.ip_address}
+                    sortDirection={sortState.columnKey === 'ip_address' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('ip_address', sel)}
+                    onSortChange={(dir) => handleSort('ip_address', dir)}
+                    onClearFilter={() => clearColumnFilter('ip_address')}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
-              {logs.map((log) => (
+              {excelFilteredLogs.map((log) => (
                 <tr key={log.id}>
                   <td>{formatDateTime(log.timestamp)}</td>
                   <td>

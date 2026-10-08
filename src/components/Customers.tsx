@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { customerAPI, productAPI, formatErrorMessage } from '../services/api';
 import { Customer, Country } from '../shared-types';
 import Header from './Header';
 import { formatDate } from '../utils/dateUtils';
+import { useExcelTableFilter } from './useExcelTableFilter';
+import { ExcelHeaderCell, ExcelActiveFiltersBar } from './ExcelHeaderCell';
 
 interface CustomersProps {
   user: any;
@@ -245,6 +247,26 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
     return customer.country?.name || countries.find((c) => c.id === customer.country_id)?.name || '-';
   };
 
+  const columnAccessors = useMemo(() => ({
+    customer_name: (c: Customer) => c.customer_name || '-',
+    country: (c: Customer) => getCountryName(c) || '-',
+    payment_terms: (c: Customer) => c.payment_terms || '-',
+    agreement_status: (c: Customer) => c.agreement_status || '-',
+    agreement_validity: (c: Customer) => formatDate(c.agreement_validity),
+  }), [countries]);
+
+  const {
+    filteredAndSortedData: excelFilteredCustomers,
+    filterState,
+    sortState,
+    uniqueValuesMap,
+    setColumnFilter,
+    handleSort,
+    clearColumnFilter,
+    clearAllFilters,
+    activeFilterCount,
+  } = useExcelTableFilter(customers, columnAccessors);
+
   if (loading) {
     return <div className="loading">Loading customers...</div>;
   }
@@ -268,21 +290,82 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
           </button>
         </div>
 
+        <ExcelActiveFiltersBar
+          activeCount={activeFilterCount}
+          isSorted={!!sortState.direction}
+          onClearAll={clearAllFilters}
+        />
+
         {/* Desktop Table View */}
         <div className="table-container">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Customer Name</th>
-                <th>Country</th>
-                <th>Shipping Terms</th>
-                <th>Agreement Status</th>
-                <th>Agreement Validity</th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="customer_name"
+                    label="Customer Name"
+                    uniqueValues={uniqueValuesMap.customer_name}
+                    selectedValues={filterState.customer_name}
+                    sortDirection={sortState.columnKey === 'customer_name' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('customer_name', sel)}
+                    onSortChange={(dir) => handleSort('customer_name', dir)}
+                    onClearFilter={() => clearColumnFilter('customer_name')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="country"
+                    label="Country"
+                    uniqueValues={uniqueValuesMap.country}
+                    selectedValues={filterState.country}
+                    sortDirection={sortState.columnKey === 'country' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('country', sel)}
+                    onSortChange={(dir) => handleSort('country', dir)}
+                    onClearFilter={() => clearColumnFilter('country')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="payment_terms"
+                    label="Shipping Terms"
+                    uniqueValues={uniqueValuesMap.payment_terms}
+                    selectedValues={filterState.payment_terms}
+                    sortDirection={sortState.columnKey === 'payment_terms' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('payment_terms', sel)}
+                    onSortChange={(dir) => handleSort('payment_terms', dir)}
+                    onClearFilter={() => clearColumnFilter('payment_terms')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="agreement_status"
+                    label="Agreement Status"
+                    uniqueValues={uniqueValuesMap.agreement_status}
+                    selectedValues={filterState.agreement_status}
+                    sortDirection={sortState.columnKey === 'agreement_status' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('agreement_status', sel)}
+                    onSortChange={(dir) => handleSort('agreement_status', dir)}
+                    onClearFilter={() => clearColumnFilter('agreement_status')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="agreement_validity"
+                    label="Agreement Validity"
+                    uniqueValues={uniqueValuesMap.agreement_validity}
+                    selectedValues={filterState.agreement_validity}
+                    sortDirection={sortState.columnKey === 'agreement_validity' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('agreement_validity', sel)}
+                    onSortChange={(dir) => handleSort('agreement_validity', dir)}
+                    onClearFilter={() => clearColumnFilter('agreement_validity')}
+                  />
+                </th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {customers.map((customer) => (
+              {excelFilteredCustomers.map((customer) => (
                 <tr key={customer.id}>
                   <td>{customer.customer_name}</td>
                   <td>{getCountryName(customer)}</td>
@@ -308,7 +391,7 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {customers.map((customer) => (
+          {excelFilteredCustomers.map((customer) => (
             <div key={customer.id} className="mobile-card">
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Customer Name</span>

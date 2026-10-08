@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { registrationAPI, productAPI, formatErrorMessage } from '../services/api';
 import Header from './Header';
 import { Country } from '../shared-types';
 import { formatDate } from '../utils/dateUtils';
+import { useExcelTableFilter } from './useExcelTableFilter';
+import { ExcelHeaderCell, ExcelActiveFiltersBar } from './ExcelHeaderCell';
 
 interface RegistrationsProps {
   user: any;
@@ -186,6 +188,29 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
     return new Date(expiryDate) < new Date();
   };
 
+  const columnAccessors = useMemo(() => ({
+    country: (r: any) => r.country?.name || '-',
+    sku: (r: any) => r.sku || '-',
+    product: (r: any) => r.product?.product_name || '-',
+    registration_number: (r: any) => r.registration_number || '-',
+    status: (r: any) => r.registration_status || '-',
+    issue_date: (r: any) => formatDate(r.registration_issue_date),
+    expiry_date: (r: any) => formatDate(r.registration_expiry_date),
+    certificate: (r: any) => (r.certificate_path ? '✓ Yes' : '✗ No'),
+  }), []);
+
+  const {
+    filteredAndSortedData: excelFilteredRegistrations,
+    filterState,
+    sortState,
+    uniqueValuesMap,
+    setColumnFilter,
+    handleSort,
+    clearColumnFilter,
+    clearAllFilters,
+    activeFilterCount,
+  } = useExcelTableFilter(registrations, columnAccessors);
+
   if (loading) {
     return <div className="loading">Loading registrations...</div>;
   }
@@ -202,24 +227,118 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
           </button>
         </div>
 
+        <ExcelActiveFiltersBar
+          activeCount={activeFilterCount}
+          isSorted={!!sortState.direction}
+          onClearAll={clearAllFilters}
+        />
+
         {/* Desktop Table View */}
         <div className="table-container">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Country</th>
-                <th>SKU</th>
-                <th>Product</th>
-                <th>Registration Number</th>
-                <th>Status</th>
-                <th>Issue Date</th>
-                <th>Expiry Date</th>
-                <th>Certificate</th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="country"
+                    label="Country"
+                    uniqueValues={uniqueValuesMap.country}
+                    selectedValues={filterState.country}
+                    sortDirection={sortState.columnKey === 'country' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('country', sel)}
+                    onSortChange={(dir) => handleSort('country', dir)}
+                    onClearFilter={() => clearColumnFilter('country')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="sku"
+                    label="SKU"
+                    uniqueValues={uniqueValuesMap.sku}
+                    selectedValues={filterState.sku}
+                    sortDirection={sortState.columnKey === 'sku' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('sku', sel)}
+                    onSortChange={(dir) => handleSort('sku', dir)}
+                    onClearFilter={() => clearColumnFilter('sku')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="product"
+                    label="Product"
+                    uniqueValues={uniqueValuesMap.product}
+                    selectedValues={filterState.product}
+                    sortDirection={sortState.columnKey === 'product' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('product', sel)}
+                    onSortChange={(dir) => handleSort('product', dir)}
+                    onClearFilter={() => clearColumnFilter('product')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="registration_number"
+                    label="Registration Number"
+                    uniqueValues={uniqueValuesMap.registration_number}
+                    selectedValues={filterState.registration_number}
+                    sortDirection={sortState.columnKey === 'registration_number' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('registration_number', sel)}
+                    onSortChange={(dir) => handleSort('registration_number', dir)}
+                    onClearFilter={() => clearColumnFilter('registration_number')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="status"
+                    label="Status"
+                    uniqueValues={uniqueValuesMap.status}
+                    selectedValues={filterState.status}
+                    sortDirection={sortState.columnKey === 'status' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('status', sel)}
+                    onSortChange={(dir) => handleSort('status', dir)}
+                    onClearFilter={() => clearColumnFilter('status')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="issue_date"
+                    label="Issue Date"
+                    uniqueValues={uniqueValuesMap.issue_date}
+                    selectedValues={filterState.issue_date}
+                    sortDirection={sortState.columnKey === 'issue_date' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('issue_date', sel)}
+                    onSortChange={(dir) => handleSort('issue_date', dir)}
+                    onClearFilter={() => clearColumnFilter('issue_date')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="expiry_date"
+                    label="Expiry Date"
+                    uniqueValues={uniqueValuesMap.expiry_date}
+                    selectedValues={filterState.expiry_date}
+                    sortDirection={sortState.columnKey === 'expiry_date' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('expiry_date', sel)}
+                    onSortChange={(dir) => handleSort('expiry_date', dir)}
+                    onClearFilter={() => clearColumnFilter('expiry_date')}
+                  />
+                </th>
+                <th>
+                  <ExcelHeaderCell
+                    columnKey="certificate"
+                    label="Certificate"
+                    uniqueValues={uniqueValuesMap.certificate}
+                    selectedValues={filterState.certificate}
+                    sortDirection={sortState.columnKey === 'certificate' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('certificate', sel)}
+                    onSortChange={(dir) => handleSort('certificate', dir)}
+                    onClearFilter={() => clearColumnFilter('certificate')}
+                  />
+                </th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {registrations.map((reg) => (
+              {excelFilteredRegistrations.map((reg) => (
                 <tr
                   key={reg.id}
                   style={{
@@ -269,7 +388,7 @@ const Registrations: React.FC<RegistrationsProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {registrations.map((reg) => (
+          {excelFilteredRegistrations.map((reg) => (
             <div
               key={reg.id}
               className="mobile-card"
