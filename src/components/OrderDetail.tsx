@@ -595,7 +595,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   const hasPendingApproval = () => {
     if (!order?.approvals) return false;
     return order.approvals.some(
-      (a: IApproval) => a.department === user.department && a.status === 'PENDING'
+      (a: IApproval) => a.department === user?.department && a.status === 'PENDING'
     );
   };
 
@@ -614,8 +614,8 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   const canEditOrder = () => {
     if (!order?.approvals) return false;
     const isExportsTeam =
-      user.department === 'Exports' &&
-      user.role?.toLowerCase() !== 'manager'; // Team members, not the manager
+      user?.department === 'Exports' &&
+      user?.role?.toLowerCase() !== 'manager'; // Team members, not the manager
     if (!isExportsTeam) return false;
     const allPending = order.approvals.every((a: IApproval) => a.status === 'PENDING');
     return allPending;
@@ -637,9 +637,9 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     const isSCMMilestone = scmMilestones.includes(rawName);
 
     if (isSCMMilestone) {
-      return user.department === 'SCM' || user.department === 'Management';
+      return user?.department === 'SCM' || user?.department === 'Management';
     } else {
-      return user.department === 'Exports' || user.department === 'Exports Team' || user.department?.startsWith('Exports') || user.department === 'Management';
+      return user?.department === 'Exports' || user?.department === 'Exports Team' || user?.department?.startsWith('Exports') || user?.department === 'Management';
     }
   };
 
@@ -746,11 +746,27 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   };
 
   if (loading) {
-    return <div className="loading">Loading order details...</div>;
+    return (
+      <div className="main-container">
+        <Header user={user} onLogout={onLogout} />
+        <div className="loading">Loading order details...</div>
+      </div>
+    );
   }
 
   if (!order) {
-    return <div className="loading">Order not found</div>;
+    return (
+      <div className="main-container">
+        <Header user={user} onLogout={onLogout} />
+        <div className="not-found-card">
+          <h2>Order Not Found</h2>
+          <p>The requested order could not be found or your session may have expired.</p>
+          <button className="submit-button" onClick={() => navigate('/orders')}>
+            ← Back to Orders
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // ================================
@@ -798,7 +814,7 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
   // Existing workflow code
   const workflowMessage = getWorkflowMessage();
   const sortedApprovals = getSortedApprovals();
-  const isSCMTeam = user.department === 'SCM';
+  const isSCMTeam = user?.department === 'SCM';
 
   return (
     <div className="main-container">

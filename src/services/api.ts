@@ -1,10 +1,11 @@
 import axios from 'axios';
+import { clearAuth, isTokenExpired } from '../utils/auth';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse, FullSearchResultItem, FullSearchResponse } from "../shared-types";
 import { IOrderCreate } from "../types";
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://eoct-backend.onrender.com/api';
 
-// 
+// https://eoct-backend.onrender.com
 
 const api = axios.create({
   baseURL: API_URL,
@@ -17,30 +18,42 @@ const api = axios.create({
 // Request Interceptor
 api.interceptors.request.use(
   (config) => {
-    console.log("Axios Request:", config);
     const token = localStorage.getItem('token');
     if (token) {
+      if (isTokenExpired(token)) {
+        clearAuth();
+        window.dispatchEvent(new CustomEvent('auth-session-expired', {
+          detail: { message: 'Your session has expired. Please log in again.' }
+        }));
+        return Promise.reject(new axios.Cancel('Session expired.'));
+      }
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
-    console.error("Axios Request Error:", error);
     return Promise.reject(error);
   }
 );
 
-
-
 // Response Interceptor
 api.interceptors.response.use(
   (response) => {
-    console.log("Axios Response:", response);
     return response;
   },
   (error) => {
-    console.error("Axios Response Error:", error.response || error);
-    if (error.response && (error.response.status === 503 || error.response.data?.in_maintenance)) {
+    // Session expired / Unauthorized handling
+    if (error.response && error.response.status === 401) {
+      clearAuth();
+      window.dispatchEvent(new CustomEvent('auth-session-expired', {
+        detail: {
+          message: error.response.data?.detail || 'Your session has expired. Please log in again.'
+        }
+      }));
+    }
+
+    // Only dispatch maintenance event if explicitly flagged by backend maintenance mode
+    if (error.response && error.response.data?.in_maintenance === true) {
       window.dispatchEvent(new CustomEvent('system-maintenance-event', {
         detail: error.response.data
       }));
@@ -65,7 +78,14 @@ export const dashboardAPI = {
 
 // Order APIs
 export const orderAPI = {
-  getOrders: (status?: string, productType?: string, skip: number = 0, limit: number = 20) => api.get('/orders', { params: { status, product_type: productType, skip, limit } }),
+  getOrders: (status?: string, productType?: string, skip?: number, limit?: number) => {
+    const params: any = {};
+    if (status) params.status = status;
+    if (productType) params.product_type = productType;
+    if (skip !== undefined) params.skip = skip;
+    if (limit !== undefined) params.limit = limit;
+    return api.get('/orders', { params });
+  },
   getOrder: (id: number) => api.get(`/orders/${id}`),
   createOrder: (data: IOrderCreate) => api.post('/orders', data),
   updateOrder: (id: number, data: any) => api.put(`/orders/${id}`, data),
@@ -80,7 +100,13 @@ export const orderAPI = {
 
 // Product APIs
 export const productAPI = {
-  getProducts: (skip: number = 0, limit: number = 20, scmUserType?: string) => api.get('/products', { params: { skip, limit, scm_user_type: scmUserType } }),
+  getProducts: (skip?: number, limit?: number, scmUserType?: string) => {
+    const params: any = {};
+    if (skip !== undefined) params.skip = skip;
+    if (limit !== undefined) params.limit = limit;
+    if (scmUserType) params.scm_user_type = scmUserType;
+    return api.get('/products', { params });
+  },
   getProductDetail: (id: number) => api.get(`/products/detail/${id}`),
   getProductsByCountry: (countryName: string) => api.get<ProductSearchItem[]>(`/skus/${countryName}`),
   createProduct: (data: any) => api.post('/products', data),
@@ -125,13 +151,15 @@ export const customerAPI = {
     country?: string,
     productSku?: string,
     productName?: string,
-    skip: number = 0,
-    limit: number = 20
+    skip?: number,
+    limit?: number
   ) => {
-    const params: any = { skip, limit };
+    const params: any = {};
     if (country) params.country = country;
     if (productSku) params.product_sku = productSku;
     if (productName) params.product_name = productName;
+    if (skip !== undefined) params.skip = skip;
+    if (limit !== undefined) params.limit = limit;
     return api.get<Customer[]>('/customers', { params });
   },
   getCustomersByCountry: (countryId: number) => api.get<Customer[]>(`/customers/by-country/${countryId}`),
@@ -143,7 +171,12 @@ export const customerAPI = {
 
 // Registration APIs
 export const registrationAPI = {
-  getRegistrations: (skip: number = 0, limit: number = 20) => api.get('/registrations', { params: { skip, limit } }),
+  getRegistrations: (skip?: number, limit?: number) => {
+    const params: any = {};
+    if (skip !== undefined) params.skip = skip;
+    if (limit !== undefined) params.limit = limit;
+    return api.get('/registrations', { params });
+  },
   getCountries: () => api.get<Country[]>('/countries'),
   getRegistrationsBySku: (sku: string) => api.get('/registrations/by-sku', { params: { sku } }),
   getRegistrationByCountryAndSku: (countryId: number | string, sku: string) => api.get('/registrations/by-country-sku', { params: { country_id: countryId, sku } }),
@@ -166,7 +199,13 @@ export const alertAPI = {
 
 // Audit Log APIs
 export const auditAPI = {
-  getAuditLogs: (orderId?: number, skip: number = 0, limit: number = 20) => api.get('/audit-logs', { params: { order_id: orderId, skip, limit } }),
+  getAuditLogs: (orderId?: number, skip?: number, limit?: number) => {
+    const params: any = {};
+    if (orderId !== undefined) params.order_id = orderId;
+    if (skip !== undefined) params.skip = skip;
+    if (limit !== undefined) params.limit = limit;
+    return api.get('/audit-logs', { params });
+  },
 };
 
 // Search APIs

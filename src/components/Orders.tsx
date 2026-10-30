@@ -19,7 +19,6 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(15);
-  const [hasMore, setHasMore] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -32,17 +31,14 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
   }, [location.search]);
 
   useEffect(() => {
-    setPage(1);
-    fetchOrders(1);
+    fetchOrders();
   }, [statusFilter, productTypeFilter]);
 
-  const fetchOrders = async (p: number = page) => {
+  const fetchOrders = async () => {
     try {
       setLoading(true);
-      const skip = (p - 1) * pageSize;
-      const response = await orderAPI.getOrders(statusFilter || undefined, productTypeFilter || undefined, skip, pageSize);
+      const response = await orderAPI.getOrders(statusFilter || undefined, productTypeFilter || undefined);
       setOrders(response.data);
-      setHasMore(response.data.length === pageSize);
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
@@ -111,7 +107,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
       setLoading(true);
       await productAPI.requestPmCode(sku);
       alert(`PM Code request submitted successfully for SKU: ${sku}`);
-      await fetchOrders(page);
+      await fetchOrders();
     } catch (error: any) {
       console.error('Error requesting PM Code:', error);
       alert(
@@ -175,19 +171,21 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     return '—';
   };
 
-  const filteredOrders = orders.filter((order) => {
-    if (!searchTerm.trim()) return true;
+  const filteredOrders = useMemo(() => {
+    if (!searchTerm.trim()) return orders;
     const term = searchTerm.toLowerCase();
-    return (
-      (order.order_id && String(order.order_id).toLowerCase().includes(term)) ||
-      (order.order_number && order.order_number.toLowerCase().includes(term)) ||
-      (order.customer?.customer_name && order.customer.customer_name.toLowerCase().includes(term)) ||
-      (order.country?.name && order.country.name.toLowerCase().includes(term)) ||
-      (order.sku && order.sku.toLowerCase().includes(term)) ||
-      (order.status && order.status.toLowerCase().includes(term)) ||
-      (order.compliance_status && order.compliance_status.toLowerCase().includes(term))
-    );
-  });
+    return orders.filter((order) => {
+      return (
+        (order.order_id && String(order.order_id).toLowerCase().includes(term)) ||
+        (order.order_number && order.order_number.toLowerCase().includes(term)) ||
+        (order.customer?.customer_name && order.customer.customer_name.toLowerCase().includes(term)) ||
+        (order.country?.name && order.country.name.toLowerCase().includes(term)) ||
+        (order.sku && order.sku.toLowerCase().includes(term)) ||
+        (order.status && order.status.toLowerCase().includes(term)) ||
+        (order.compliance_status && order.compliance_status.toLowerCase().includes(term))
+      );
+    });
+  }, [orders, searchTerm]);
 
   const columnAccessors = useMemo(() => ({
     order_number: (o: any) => o.order_number || '-',
@@ -216,6 +214,17 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     activeFilterCount,
   } = useExcelTableFilter(filteredOrders, columnAccessors);
 
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statusFilter, productTypeFilter, filterState]);
+
+  const totalPages = Math.max(1, Math.ceil(excelFilteredOrders.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return excelFilteredOrders.slice(start, start + pageSize);
+  }, [excelFilteredOrders, currentPage, pageSize]);
+
   if (loading) {
     return <div className="loading">Loading orders...</div>;
   }
@@ -227,7 +236,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
       <div className="panel">
         <div className="panel-header">
           <h2>Orders</h2>
-          {user.department === 'Exports' && (
+          {user?.department === 'Exports' && (
             <button
               className="submit-button"
               onClick={() => navigate('/orders/create')}
@@ -253,7 +262,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
             </select>
           </div>
 
-          {user.department === 'SCM' && (
+          {user?.department === 'SCM' && (
             <div>
               <label style={{ marginRight: '8px' }}>Filter by Product Type:</label>
               <select
@@ -425,7 +434,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               </tr>
             </thead>
             <tbody>
-              {excelFilteredOrders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <tr
                   key={order.id}
                   onClick={() => navigate(`/orders/${order.id}`)}
@@ -463,7 +472,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {excelFilteredOrders.map((order) => (
+          {paginatedOrders.map((order) => (
             <div
               key={order.id}
               className="mobile-card"
@@ -540,7 +549,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
           ))}
         </div>
 
-        {orders.length === 0 && (
+        {excelFilteredOrders.length === 0 && (
           <p style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
             No orders found
           </p>
@@ -550,20 +559,20 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
           <button 
             className="nav-button" 
-            disabled={page === 1 || loading} 
-            onClick={() => { const newPage = page - 1; setPage(newPage); fetchOrders(newPage); }}
-            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage === 1 || loading} 
+            onClick={() => setPage(prev => Math.max(1, prev - 1))}
+            style={{ opacity: (currentPage === 1 || loading) ? 0.5 : 1, cursor: (currentPage === 1 || loading) ? 'not-allowed' : 'pointer' }}
           >
             ← Previous
           </button>
           <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
-            Page {page}
+            Page {currentPage} of {totalPages} ({excelFilteredOrders.length} {excelFilteredOrders.length === 1 ? 'order' : 'orders'})
           </span>
           <button 
             className="nav-button" 
-            disabled={!hasMore || loading} 
-            onClick={() => { const newPage = page + 1; setPage(newPage); fetchOrders(newPage); }}
-            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage >= totalPages || loading} 
+            onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+            style={{ opacity: (currentPage >= totalPages || loading) ? 0.5 : 1, cursor: (currentPage >= totalPages || loading) ? 'not-allowed' : 'pointer' }}
           >
             Next →
           </button>

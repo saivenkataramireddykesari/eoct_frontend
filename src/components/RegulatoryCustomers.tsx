@@ -131,7 +131,7 @@ const RegulatoryCustomers: React.FC<RegulatoryCustomersProps> = ({ user, onLogou
   return (
     <div>
       <h2>Regulatory Department Customer Section</h2>
-      <p>Welcome, {user.name} ({user.department} - {user.role})</p>
+      <p>Welcome, {user?.name || 'User'} ({user?.department || ''} - {user?.role || ''})</p>
 
       <button onClick={() => setShowAddModal(true)}>Add New Customer</button>
 

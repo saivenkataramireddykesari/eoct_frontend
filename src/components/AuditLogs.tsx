@@ -15,19 +15,16 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(15);
-  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    fetchLogs(1);
+    fetchLogs();
   }, []);
 
-  const fetchLogs = async (p: number = page) => {
+  const fetchLogs = async () => {
     try {
       setLoading(true);
-      const skip = (p - 1) * pageSize;
-      const response = await auditAPI.getAuditLogs(undefined, skip, pageSize);
+      const response = await auditAPI.getAuditLogs();
       setLogs(response.data);
-      setHasMore(response.data.length === pageSize);
     } catch (error) {
       console.error('Error fetching audit logs:', error);
     } finally {
@@ -66,6 +63,17 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
     clearAllFilters,
     activeFilterCount,
   } = useExcelTableFilter(logs, columnAccessors);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterState]);
+
+  const totalPages = Math.max(1, Math.ceil(excelFilteredLogs.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return excelFilteredLogs.slice(start, start + pageSize);
+  }, [excelFilteredLogs, currentPage, pageSize]);
 
   if (loading) {
     return <div className="loading">Loading audit logs...</div>;
@@ -188,7 +196,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
               </tr>
             </thead>
             <tbody>
-              {excelFilteredLogs.map((log) => (
+              {paginatedLogs.map((log) => (
                 <tr key={log.id}>
                   <td>{formatDateTime(log.timestamp)}</td>
                   <td>
@@ -218,7 +226,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {logs.map((log) => (
+          {paginatedLogs.map((log) => (
             <div key={log.id} className="mobile-card">
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Timestamp</span>
@@ -280,7 +288,7 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
           ))}
         </div>
 
-        {logs.length === 0 && (
+        {excelFilteredLogs.length === 0 && (
           <p style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
             No audit logs found
           </p>
@@ -290,20 +298,20 @@ const AuditLogs: React.FC<AuditLogsProps> = ({ user, onLogout }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
           <button 
             className="nav-button" 
-            disabled={page === 1 || loading} 
-            onClick={() => { const newPage = page - 1; setPage(newPage); fetchLogs(newPage); }}
-            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage === 1 || loading} 
+            onClick={() => setPage(prev => Math.max(1, prev - 1))}
+            style={{ opacity: (currentPage === 1 || loading) ? 0.5 : 1, cursor: (currentPage === 1 || loading) ? 'not-allowed' : 'pointer' }}
           >
             ← Previous
           </button>
           <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
-            Page {page}
+            Page {currentPage} of {totalPages} ({excelFilteredLogs.length} {excelFilteredLogs.length === 1 ? 'log' : 'logs'})
           </span>
           <button 
             className="nav-button" 
-            disabled={!hasMore || loading} 
-            onClick={() => { const newPage = page + 1; setPage(newPage); fetchLogs(newPage); }}
-            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage >= totalPages || loading} 
+            onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+            style={{ opacity: (currentPage >= totalPages || loading) ? 0.5 : 1, cursor: (currentPage >= totalPages || loading) ? 'not-allowed' : 'pointer' }}
           >
             Next →
           </button>

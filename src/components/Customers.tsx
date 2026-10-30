@@ -32,10 +32,9 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(15);
-  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    fetchCustomers(1);
+    fetchCustomers();
     fetchCountries();
   }, []);
 
@@ -56,13 +55,11 @@ const Customers: React.FC<CustomersProps> = ({ user, onLogout }) => {
     }
   };
 
-  const fetchCustomers = async (p: number = page) => {
+  const fetchCustomers = async () => {
     try {
       setLoading(true);
-      const skip = (p - 1) * pageSize;
-      const response = await customerAPI.getCustomers(undefined, undefined, undefined, skip, pageSize);
+      const response = await customerAPI.getCustomers();
       setCustomers(response.data);
-      setHasMore(response.data.length === pageSize);
     } catch (error) {
       console.error('Error fetching customers:', error);
     } finally {
@@ -267,6 +264,17 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
     activeFilterCount,
   } = useExcelTableFilter(customers, columnAccessors);
 
+  useEffect(() => {
+    setPage(1);
+  }, [filterState]);
+
+  const totalPages = Math.max(1, Math.ceil(excelFilteredCustomers.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedCustomers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return excelFilteredCustomers.slice(start, start + pageSize);
+  }, [excelFilteredCustomers, currentPage, pageSize]);
+
   if (loading) {
     return <div className="loading">Loading customers...</div>;
   }
@@ -365,7 +373,7 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
               </tr>
             </thead>
             <tbody>
-              {excelFilteredCustomers.map((customer) => (
+              {paginatedCustomers.map((customer) => (
                 <tr key={customer.id}>
                   <td>{customer.customer_name}</td>
                   <td>{getCountryName(customer)}</td>
@@ -391,7 +399,7 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {excelFilteredCustomers.map((customer) => (
+          {paginatedCustomers.map((customer) => (
             <div key={customer.id} className="mobile-card">
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Customer Name</span>
@@ -428,7 +436,7 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
           ))}
         </div>
 
-        {customers.length === 0 && (
+        {excelFilteredCustomers.length === 0 && (
           <p style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
             No customers found
           </p>
@@ -438,20 +446,20 @@ if (formData.agreement_status === 'Active' && !formData.agreement_validity) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
           <button 
             className="nav-button" 
-            disabled={page === 1 || loading} 
-            onClick={() => { const newPage = page - 1; setPage(newPage); fetchCustomers(newPage); }}
-            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage === 1 || loading} 
+            onClick={() => setPage(prev => Math.max(1, prev - 1))}
+            style={{ opacity: (currentPage === 1 || loading) ? 0.5 : 1, cursor: (currentPage === 1 || loading) ? 'not-allowed' : 'pointer' }}
           >
             ← Previous
           </button>
           <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
-            Page {page}
+            Page {currentPage} of {totalPages} ({excelFilteredCustomers.length} {excelFilteredCustomers.length === 1 ? 'customer' : 'customers'})
           </span>
           <button 
             className="nav-button" 
-            disabled={!hasMore || loading} 
-            onClick={() => { const newPage = page + 1; setPage(newPage); fetchCustomers(newPage); }}
-            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage >= totalPages || loading} 
+            onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+            style={{ opacity: (currentPage >= totalPages || loading) ? 0.5 : 1, cursor: (currentPage >= totalPages || loading) ? 'not-allowed' : 'pointer' }}
           >
             Next →
           </button>

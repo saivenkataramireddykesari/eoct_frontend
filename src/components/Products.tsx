@@ -121,12 +121,11 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(15);
-  const [hasMore, setHasMore] = useState(true);
 
   const isRegulatory = user?.department === 'Regulatory';
 
   useEffect(() => {
-    fetchProducts(1, user?.department);
+    fetchProducts(user?.department);
     fetchMasterData();
   }, [user?.department]);
 
@@ -158,12 +157,11 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     setFilteredCustomers(filtered);
   }, [formData.country_id, customers]);
 
-  const fetchProducts = async (p: number = page, scmUserType?: string) => {
+  const fetchProducts = async (scmUserType?: string) => {
     try {
       setLoading(true);
-      const response = await productAPI.getProducts(0, 500, scmUserType);
+      const response = await productAPI.getProducts(undefined, undefined, scmUserType);
       setProducts(response.data);
-      setHasMore(false);
     } catch (error) {
       console.error('Error fetching products:', error);
     } finally {
@@ -363,42 +361,50 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     }
   };
 
-  const submitPmOrdersProducts = products.filter((product) => {
-    const requests = product.pm_code_requests || [];
-    const latestRequest = requests[requests.length - 1];
-    return latestRequest && latestRequest.status === 'PENDING_ARTWORK';
-  });
+  const submitPmOrdersProducts = useMemo(() => {
+    return products.filter((product) => {
+      const requests = product.pm_code_requests || [];
+      const latestRequest = requests[requests.length - 1];
+      return latestRequest && latestRequest.status === 'PENDING_ARTWORK';
+    });
+  }, [products]);
 
-  const updatePmCodesProducts = products.filter((product) => {
-    const requests = product.pm_code_requests || [];
-    const latestRequest = requests[requests.length - 1];
-    return !latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL');
-  });
+  const updatePmCodesProducts = useMemo(() => {
+    return products.filter((product) => {
+      const requests = product.pm_code_requests || [];
+      const latestRequest = requests[requests.length - 1];
+      return !latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL');
+    });
+  }, [products]);
 
-  const filteredProducts = products.filter((product) => {
-    const requests = product.pm_code_requests || [];
-    const latestRequest = requests[requests.length - 1];
+  const filteredProducts = useMemo(() => {
+    const isArtwork = user?.department === 'Artwork';
+    const trimmedSearch = searchTerm.trim().toLowerCase();
 
-    if (user?.department === 'Artwork') {
-      if (activeTab === 'submit_pm_orders') {
-        if (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') return false;
-      } else if (activeTab === 'update_pm_codes') {
-        if (latestRequest && (latestRequest.status === 'PENDING_ARTWORK' || latestRequest.status === 'AWAITING_REGULATORY_APPROVAL')) return false;
+    return products.filter((product) => {
+      const requests = product.pm_code_requests || [];
+      const latestRequest = requests[requests.length - 1];
+
+      if (isArtwork) {
+        if (activeTab === 'submit_pm_orders') {
+          if (!latestRequest || latestRequest.status !== 'PENDING_ARTWORK') return false;
+        } else if (activeTab === 'update_pm_codes') {
+          if (latestRequest && (latestRequest.status === 'PENDING_ARTWORK' || latestRequest.status === 'AWAITING_REGULATORY_APPROVAL')) return false;
+        }
       }
-    }
 
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      (product.sku_code && product.sku_code.toLowerCase().includes(term)) ||
-      (product.product_name && product.product_name.toLowerCase().includes(term)) ||
-      (product.customer && product.customer.toLowerCase().includes(term)) ||
-      (product.country?.name && product.country.name.toLowerCase().includes(term)) ||
-      (product.pack_size && product.pack_size.toLowerCase().includes(term)) ||
-      (product.primary_pm_code && product.primary_pm_code.toLowerCase().includes(term)) ||
-      (product.artwork_status && product.artwork_status.toLowerCase().includes(term))
-    );
-  });
+      if (!trimmedSearch) return true;
+      return (
+        (product.sku_code && product.sku_code.toLowerCase().includes(trimmedSearch)) ||
+        (product.product_name && product.product_name.toLowerCase().includes(trimmedSearch)) ||
+        (product.customer && product.customer.toLowerCase().includes(trimmedSearch)) ||
+        (product.country?.name && product.country.name.toLowerCase().includes(trimmedSearch)) ||
+        (product.pack_size && product.pack_size.toLowerCase().includes(trimmedSearch)) ||
+        (product.primary_pm_code && product.primary_pm_code.toLowerCase().includes(trimmedSearch)) ||
+        (product.artwork_status && product.artwork_status.toLowerCase().includes(trimmedSearch))
+      );
+    });
+  }, [products, user?.department, activeTab, searchTerm]);
 
   const columnAccessors = useMemo(() => ({
     sku_code: (p: any) => p.sku_code || '-',
@@ -434,6 +440,17 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
     activeFilterCount,
   } = useExcelTableFilter(filteredProducts, columnAccessors);
 
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, activeTab, filterState]);
+
+  const totalPages = Math.max(1, Math.ceil(excelFilteredProducts.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return excelFilteredProducts.slice(start, start + pageSize);
+  }, [excelFilteredProducts, currentPage, pageSize]);
+
   const getPanelTitle = () => {
     if (user?.department === 'Artwork') {
       if (activeTab === 'submit_pm_orders') return 'Submit PM Code Orders';
@@ -455,7 +472,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
         <div className="panel-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
           <h2>{getPanelTitle()}</h2>
           {/* Only show "Add Product" for Regulatory department */}
-          {user.department === 'Regulatory' && (
+          {user?.department === 'Regulatory' && (
             <button className="submit-button" onClick={handleAddProductClick}>
               + Add Product
             </button>
@@ -682,7 +699,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                   </td>
                 </tr>
               ) : (
-                excelFilteredProducts.map((product) => {
+                paginatedProducts.map((product) => {
                 const requests = product.pm_code_requests || [];
                 const latestRequest = requests[requests.length - 1];
                 const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
@@ -778,10 +795,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                           </button>
                         </div>
                       )}
-                      {user.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
+                      {user?.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
                         <span style={{ color: '#0284c7', fontSize: '0.85em', fontWeight: 600 }}>Awaiting Regulatory Approval</span>
                       )}
-                      {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
+                      {user?.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
                         <button
                           className="submit-button"
                           style={{ background: '#ff9800', borderColor: '#ff9800' }}
@@ -795,7 +812,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                           Submit PM Code
                         </button>
                       )}
-                      {user.department === 'Artwork' && (!latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL')) && (
+                      {user?.department === 'Artwork' && (!latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL')) && (
                         <button
                           className="submit-button"
                           style={{ background: '#ff9800', borderColor: '#ff9800' }}
@@ -811,7 +828,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       )}
                       {!showGetPmCode &&
                         !(isRegulatory && latestRequest && (latestRequest.status === 'PENDING_ARTWORK' || latestRequest.status === 'AWAITING_REGULATORY_APPROVAL')) &&
-                        user.department !== 'Artwork' && (
+                        user?.department !== 'Artwork' && (
                           <span style={{ color: '#999' }}>&lt; 1 day</span>
                         )}
                     </td>
@@ -825,7 +842,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
 
         {/* Mobile Card View */}
         <div className="mobile-table-cards">
-          {excelFilteredProducts.map((product) => {
+          {paginatedProducts.map((product) => {
             const requests = product.pm_code_requests || [];
             const latestRequest = requests[requests.length - 1];
             const showGetPmCode = isRegulatory && (product.artwork_status !== 'Available') && (!product.primary_pm_code) && (!latestRequest || latestRequest.status === 'APPROVED');
@@ -956,10 +973,10 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       </button>
                     </div>
                   )}
-                  {user.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
+                  {user?.department === 'Artwork' && latestRequest && latestRequest.status === 'AWAITING_REGULATORY_APPROVAL' && (
                     <span style={{ color: '#0284c7', fontSize: '0.85em', fontWeight: 600, textAlign: 'center', width: '100%' }}>Awaiting Regulatory Approval</span>
                   )}
-                  {user.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
+                  {user?.department === 'Artwork' && latestRequest && latestRequest.status === 'PENDING_ARTWORK' && (
                     <button
                       className="submit-button"
                       style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
@@ -973,7 +990,7 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
                       Submit PM Code
                     </button>
                   )}
-                  {user.department === 'Artwork' && (!latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL')) && (
+                  {user?.department === 'Artwork' && (!latestRequest || (latestRequest.status !== 'PENDING_ARTWORK' && latestRequest.status !== 'AWAITING_REGULATORY_APPROVAL')) && (
                     <button
                       className="submit-button"
                       style={{ background: '#ff9800', borderColor: '#ff9800', width: '100%' }}
@@ -1003,20 +1020,20 @@ const Products: React.FC<ProductsProps> = ({ user, onLogout }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
           <button
             className="nav-button"
-            disabled={page === 1 || loading}
-            onClick={() => { const newPage = page - 1; setPage(newPage); fetchProducts(newPage); }}
-            style={{ opacity: (page === 1 || loading) ? 0.5 : 1, cursor: (page === 1 || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage === 1 || loading}
+            onClick={() => setPage(prev => Math.max(1, prev - 1))}
+            style={{ opacity: (currentPage === 1 || loading) ? 0.5 : 1, cursor: (currentPage === 1 || loading) ? 'not-allowed' : 'pointer' }}
           >
             ← Previous
           </button>
           <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#475569' }}>
-            Page {page}
+            Page {currentPage} of {totalPages} ({excelFilteredProducts.length} {excelFilteredProducts.length === 1 ? 'product' : 'products'})
           </span>
           <button
             className="nav-button"
-            disabled={!hasMore || loading}
-            onClick={() => { const newPage = page + 1; setPage(newPage); fetchProducts(newPage); }}
-            style={{ opacity: (!hasMore || loading) ? 0.5 : 1, cursor: (!hasMore || loading) ? 'not-allowed' : 'pointer' }}
+            disabled={currentPage >= totalPages || loading}
+            onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+            style={{ opacity: (currentPage >= totalPages || loading) ? 0.5 : 1, cursor: (currentPage >= totalPages || loading) ? 'not-allowed' : 'pointer' }}
           >
             Next →
           </button>

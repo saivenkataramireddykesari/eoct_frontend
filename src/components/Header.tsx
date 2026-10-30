@@ -36,13 +36,28 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     const params = new URLSearchParams(location.search);
     const q = params.get('search') || params.get('query') || '';
     setSearchQuery(q);
-  }, [location.search]);
+  }, [location.pathname]); // Only reset when route path changes, not on query param update
 
   useEffect(() => {
     const handler = setTimeout(async () => {
-      if (searchQuery.trim().length > 0) {
+      // 1. Sync URL search param smoothly without lagging input
+      const params = new URLSearchParams(location.search);
+      const currentUrlSearch = params.get('search') || '';
+      if (searchQuery.trim() !== currentUrlSearch.trim()) {
+        if (searchQuery.trim()) {
+          params.set('search', searchQuery.trim());
+        } else {
+          params.delete('search');
+        }
+        const searchString = params.toString();
+        const newPath = searchString ? `${location.pathname}?${searchString}` : location.pathname;
+        navigate(newPath, { replace: true });
+      }
+
+      // 2. Fetch search suggestions if query length > 1
+      if (searchQuery.trim().length > 1) {
         try {
-          const response = await searchAPI.getSuggestions(searchQuery);
+          const response = await searchAPI.getSuggestions(searchQuery.trim());
           setSuggestions(response.data.suggestions || []);
           setShowSuggestions(true);
         } catch (error) {
@@ -54,26 +69,15 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         setSuggestions([]);
         setShowSuggestions(false);
       }
-    }, 150); // 150ms fast debounce for each word/character typed
+    }, 350); // 350ms debounce ensures smooth typing without lagging
 
     return () => {
       clearTimeout(handler);
     };
-  }, [searchQuery]);
+  }, [searchQuery, location.pathname, location.search, navigate]);
 
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setSearchQuery(val);
-
-    const params = new URLSearchParams(location.search);
-    if (val) {
-      params.set('search', val);
-    } else {
-      params.delete('search');
-    }
-    const searchString = params.toString();
-    const newPath = searchString ? `${location.pathname}?${searchString}` : location.pathname;
-    navigate(newPath, { replace: true });
+    setSearchQuery(e.target.value);
   };
 
   const handleSuggestionClick = (suggestion: SearchSuggestion) => {
@@ -90,14 +94,14 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         }
         break;
       case 'customer':
-        if (user.department === 'Artwork') {
+        if (user?.department === 'Artwork') {
           navigate(`/products?search=${encodeURIComponent(suggestion.name)}`);
         } else {
           navigate(`/customers/${suggestion.id}`);
         }
         break;
       case 'order':
-        if (user.department === 'Artwork') {
+        if (user?.department === 'Artwork') {
           navigate(`/products?search=${encodeURIComponent(suggestion.name)}`);
         } else {
           navigate(`/orders/${suggestion.id}`);
@@ -109,7 +113,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
     }
   };
 
-  const navItems = user.department === 'Artwork'
+  const navItems = user?.department === 'Artwork'
     ? [
         { path: '/products?tab=submit_pm_orders', label: 'Submit PM Code Orders' },
         { path: '/products?tab=update_pm_codes', label: 'Update PM Codes' },
@@ -117,7 +121,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         { path: '/orders', label: 'Orders' },
         { path: '/alerts', label: 'Alerts' },
       ]
-    : user.department === 'Regulatory'
+    : user?.department === 'Regulatory'
     ? [
 
         { path: '/', label: 'Orders' },
@@ -126,7 +130,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         { path: '/alerts', label: 'Alerts' },
         { path: '/audit-logs', label: 'Audit Logs' },
       ]
-    : user.department === 'Exports' && user.role === 'manager'
+    : user?.department === 'Exports' && user?.role === 'manager'
     ? [
 
         { path: '/', label: 'Orders' },
@@ -134,7 +138,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
         { path: '/alerts', label: 'Alerts' },
         { path: '/audit-logs', label: 'Audit Logs' },
       ]
-    : user.department === 'Exports'
+    : user?.department === 'Exports'
     ? [
 
         { path: '/', label: 'Orders' },
@@ -235,9 +239,9 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
       <div className="header-right">
         <div className="user-info">
           <div>
-            <strong>{user.name}</strong>
+            <strong>{user?.name || 'User'}</strong>
             <div style={{ fontSize: '12px', color: '#666' }}>
-              {user.department} | {user.employee_id}
+              {user?.department || 'Department'} | {user?.employee_id || ''}
             </div>
           </div>
           <button className="logout-button" onClick={onLogout}>
