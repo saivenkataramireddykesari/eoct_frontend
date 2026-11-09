@@ -3,7 +3,14 @@ import { clearAuth, isTokenExpired } from '../utils/auth';
 import { Customer, Country, Token, User, DashboardData, Order, Product, Registration, Milestone, Alert, AuditLog, PMCodeRequest, CanApproveResponse, BulkTargetDateItem, MilestoneHistoryResponse, ProductSearchItem, ProductSearchResponse, OrderApproval, SearchSuggestion, SearchSuggestionsResponse, FullSearchResultItem, FullSearchResponse } from "../shared-types";
 import { IOrderCreate } from "../types";
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://eoct-backend.onrender.com/api';
+const getApiUrl = (): string => {
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return process.env.REACT_APP_LOCAL_API_URL || 'http://localhost:8000/api';
+  }
+  return process.env.REACT_APP_API_URL || 'https://eoct-backend.onrender.com/api';
+};
+
+const API_URL = getApiUrl();
 
 // https://eoct-backend.onrender.com
 
