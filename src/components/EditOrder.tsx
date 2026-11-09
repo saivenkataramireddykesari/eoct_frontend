@@ -159,6 +159,13 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
     const { name, value } = e.target;
     if (name === 'country') handleCountryChange(value);
     else if (name === 'sku') handleSkuChange(value);
+    else if (name === 'import_license_required') {
+      setFormData(prev => ({
+        ...prev,
+        import_license_required: value,
+        import_license_validity: value === 'No' ? '' : prev.import_license_validity,
+      }));
+    }
     else setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -196,7 +203,7 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
         import_license_required: formData.import_license_required === 'Yes',
         po_date: formData.po_date || null,
         requested_delivery_date: formData.requested_delivery_date || null,
-        import_license_validity: formData.import_license_validity || null,
+        import_license_validity: formData.import_license_required === 'Yes' ? (formData.import_license_validity || null) : null,
       };
       await orderAPI.updateOrder(parseInt(id!), data);
       setSuccess('Order updated successfully!');
@@ -359,8 +366,15 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
                 </select>
               </div>
               <div style={group}>
-                <label style={lbl}>License Validity *</label>
-                <input type="date" name="import_license_validity" value={formData.import_license_validity} onChange={handleChange} required style={inp} />
+                <label style={lbl}>License Validity {formData.import_license_required === 'Yes' ? '*' : '(Optional)'}</label>
+                <input
+                  type="date"
+                  name="import_license_validity"
+                  value={formData.import_license_validity}
+                  onChange={handleChange}
+                  required={formData.import_license_required === 'Yes'}
+                  style={inp}
+                />
               </div>
             </div>
           </div>
