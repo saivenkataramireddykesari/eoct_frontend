@@ -13,7 +13,12 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user || user.department !== 'Exports' || user.role !== 'user') {
+    const userDept = user?.department || '';
+    const userRole = (user?.role || '').toLowerCase();
+    const isExportsDept = userDept === 'Exports' || userDept === 'Exports Team' || userDept.startsWith('Exports');
+    const isExportsTeam = isExportsDept && userRole !== 'manager' && (userRole === 'team' || userRole === 'user' || !userRole);
+
+    if (!user || !isExportsTeam) {
       navigate('/orders'); // Or any other appropriate route
       alert('You are not authorized to edit orders.');
     }
@@ -24,6 +29,7 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct]     = useState<any>(null);
   const [countries, setCountries]                 = useState<string[]>([]);
+  const [orderCountryId, setOrderCountryId]       = useState<number | null>(null);
   const [loading, setLoading]                     = useState(false);
   const [loadingDetails, setLoadingDetails]       = useState(true);
   const [error, setError]                         = useState('');
@@ -89,13 +95,16 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
       const customers = custRes.data;
       setAllCustomers(customers);
       const uniqueCountries: string[] = Array.from(
-        new Set(customers.map((c: any) => c.country as string))
-      ).sort() as string[];
+        new Set(customers.map((c: any) => (c.country?.name || c.country || '') as string))
+      ).filter(Boolean).sort() as string[];
       setCountries(uniqueCountries);
 
       const order = orderRes.data;
-      const country = order.country || '';
-      setFilteredCustomers(customers.filter((c: any) => c.country === country));
+      const country = order.country?.name || (typeof order.country === 'string' ? order.country : '');
+      const orderCId = order.country_id || order.country?.id || null;
+      setOrderCountryId(orderCId);
+
+      setFilteredCustomers(customers.filter((c: any) => (c.country?.name || c.country) === country));
 
       let products: any[] = [];
       if (country) {
@@ -133,7 +142,7 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
     setFormData(prev => ({ ...prev, country, customer_id: '', sku: '', sales_quantity: '', free_quantity: '' }));
     setSelectedProduct(null); setAvailableProducts([]);
     if (!country) { setFilteredCustomers([]); return; }
-    setFilteredCustomers(allCustomers.filter((c: any) => c.country === country));
+    setFilteredCustomers(allCustomers.filter((c: any) => (c.country?.name || c.country) === country));
     try {
       const res = await productAPI.getProductsByCountry(country);
       setAvailableProducts(res.data);
@@ -167,10 +176,19 @@ const EditOrder: React.FC<EditOrderProps> = ({ user, onLogout }) => {
       return;
     }
 
+    const selectedCustomer = allCustomers.find((c: any) => c.id === parseInt(formData.customer_id));
+    const countryIdToSend = selectedCustomer?.country_id || selectedCustomer?.country?.id || orderCountryId;
+    if (!countryIdToSend) {
+      setError('Please select a valid customer with associated country.');
+      return;
+    }
+
     setLoading(true); setError(''); setSuccess('');
     try {
+      const { country: _c, ...restFormData } = formData;
       const data = {
-        ...formData,
+        ...restFormData,
+        country_id: countryIdToSend,
         customer_id: parseInt(formData.customer_id),
         sales_quantity: parseInt(formData.sales_quantity) || 0,
         free_quantity: parseInt(formData.free_quantity) || 0,

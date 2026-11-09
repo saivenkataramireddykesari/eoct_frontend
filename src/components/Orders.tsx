@@ -171,6 +171,11 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     return '—';
   };
 
+  const userDept = user?.department || '';
+  const userRole = (user?.role || '').toLowerCase();
+  const isExportsDept = userDept === 'Exports' || userDept === 'Exports Team' || userDept.startsWith('Exports');
+  const isExportsTeam = isExportsDept && userRole !== 'manager' && (userRole === 'team' || userRole === 'user' || !userRole);
+
   const filteredOrders = useMemo(() => {
     if (!searchTerm.trim()) return orders;
     const term = searchTerm.toLowerCase();
@@ -431,6 +436,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                     onClearFilter={() => clearColumnFilter('created')}
                   />
                 </th>
+                {isExportsTeam && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -464,6 +470,17 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   <td>{order.price}</td>
                   <td>{renderPmCodeAction(order)}</td>
                   <td>{formatDate(order.created_at)}</td>
+                  {isExportsTeam && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="nav-button"
+                        style={{ padding: '4px 10px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                        onClick={() => navigate(`/orders/edit/${order.id}`)}
+                      >
+                        Edit Order
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -545,6 +562,17 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   {formatDate(order.created_at)}
                 </span>
               </div>
+              {isExportsTeam && (
+                <div className="mobile-card-row" style={{ marginTop: '8px' }} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="nav-button"
+                    style={{ padding: '6px 12px', fontSize: '0.85rem', width: '100%' }}
+                    onClick={() => navigate(`/orders/edit/${order.id}`)}
+                  >
+                    Edit Order
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

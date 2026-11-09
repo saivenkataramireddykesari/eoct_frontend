@@ -609,16 +609,13 @@ const OrderDetail: React.FC<OrderDetailProps> = ({ user, onLogout }) => {
     return canApproveStatus.reason;
   };
 
-  // Check if user can edit order
-  // Only Exports Team members (role = 'Team' or 'user') can edit before any approvals start
+  // Check if user can edit order: Exports Team members can edit order details
   const canEditOrder = () => {
-    if (!order?.approvals) return false;
-    const isExportsTeam =
-      user?.department === 'Exports' &&
-      user?.role?.toLowerCase() !== 'manager'; // Team members, not the manager
-    if (!isExportsTeam) return false;
-    const allPending = order.approvals.every((a: IApproval) => a.status === 'PENDING');
-    return allPending;
+    const userDept = user?.department || '';
+    const userRole = (user?.role || '').toLowerCase();
+    const isExportsDept = userDept === 'Exports' || userDept === 'Exports Team' || userDept.startsWith('Exports');
+    const isExportsTeam = isExportsDept && userRole !== 'manager' && (userRole === 'team' || userRole === 'user' || !userRole);
+    return Boolean(isExportsTeam);
   };
 
   // Milestones editable by SCM: PO Released, PM Received, Production Planned, Production Started, Production Completed, Batch Released
