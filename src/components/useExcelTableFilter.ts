@@ -72,10 +72,19 @@ export function useExcelTableFilter<T>(
         if (rawA === null || rawA === undefined || rawA === '') return 1;
         if (rawB === null || rawB === undefined || rawB === '') return -1;
 
-        // Number check
-        const numA = Number(rawA);
-        const numB = Number(rawB);
-        if (!isNaN(numA) && !isNaN(numB) && typeof rawA !== 'boolean' && typeof rawB !== 'boolean') {
+        // Number check (supports raw numbers and formatted currency strings)
+        const cleanA = typeof rawA === 'string' ? rawA.replace(/[^0-9.-]+/g, '') : rawA;
+        const cleanB = typeof rawB === 'string' ? rawB.replace(/[^0-9.-]+/g, '') : rawB;
+        const numA = typeof cleanA === 'number' ? cleanA : Number(cleanA);
+        const numB = typeof cleanB === 'number' ? cleanB : Number(cleanB);
+        if (
+          !isNaN(numA) &&
+          !isNaN(numB) &&
+          cleanA !== '' &&
+          cleanB !== '' &&
+          typeof rawA !== 'boolean' &&
+          typeof rawB !== 'boolean'
+        ) {
           return (numA - numB) * dirMultiplier;
         }
 

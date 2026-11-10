@@ -11,6 +11,104 @@ interface OrdersProps {
   onLogout: () => void;
 }
 
+const getCurrencySymbol = (currency?: string) => {
+  switch (currency?.toUpperCase()) {
+    case 'INR': return '₹';
+    case 'EUR': return '€';
+    case 'GBP': return '£';
+    case 'USD': return '$';
+    default: return currency ? `${currency} ` : '$';
+  }
+};
+
+const formatCurrency = (val: any, currency?: string) => {
+  if (val === null || val === undefined || val === '') return '—';
+  const num = Number(val);
+  if (isNaN(num)) return '—';
+  return `${getCurrencySymbol(currency)}${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+interface ActiveMilestoneInfo {
+  name: string;
+  status: string;
+  target_date: string | null;
+}
+
+const MILESTONE_ORDER: Record<string, number> = {
+  'po released': 1,
+  'pm procurement released': 1,
+  'pm received': 2,
+  'production planned': 3,
+  'production started': 4,
+  'production completed': 5,
+  'batch released': 6,
+  'ready for shipment': 7,
+  'freight booked': 8,
+  'shipped': 9,
+  'delivered': 10,
+};
+
+const getActiveMilestone = (order: any): ActiveMilestoneInfo | null => {
+  const milestones: any[] = order?.milestones;
+  if (!milestones || !Array.isArray(milestones) || milestones.length === 0) {
+    return null;
+  }
+
+  // Check if any milestone has been planned or started
+  const hasStarted = milestones.some(
+    (m) => (m.status && m.status !== 'PENDING') || m.target_date || m.actual_date
+  );
+  if (!hasStarted) {
+    return null;
+  }
+
+  const sorted = [...milestones].sort((a, b) => {
+    const orderA = MILESTONE_ORDER[(a.name || '').trim().toLowerCase()] || 99;
+    const orderB = MILESTONE_ORDER[(b.name || '').trim().toLowerCase()] || 99;
+    return orderA - orderB;
+  });
+
+  // 1. Any delayed milestone?
+  const delayed = sorted.find((m) => m.status === 'DELAYED');
+  if (delayed) {
+    return {
+      name: delayed.name === 'PM Procurement Released' ? 'PO Released' : delayed.name,
+      status: delayed.status,
+      target_date: delayed.target_date,
+    };
+  }
+
+  // 2. Any in-progress milestone?
+  const inProgress = sorted.find(
+    (m) => m.status === 'IN PROGRESS' || m.status === 'IN_PROGRESS'
+  );
+  if (inProgress) {
+    return {
+      name: inProgress.name === 'PM Procurement Released' ? 'PO Released' : inProgress.name,
+      status: inProgress.status,
+      target_date: inProgress.target_date,
+    };
+  }
+
+  // 3. First non-completed milestone
+  const nextMilestone = sorted.find((m) => m.status !== 'COMPLETED');
+  if (nextMilestone) {
+    return {
+      name: nextMilestone.name === 'PM Procurement Released' ? 'PO Released' : nextMilestone.name,
+      status: nextMilestone.status,
+      target_date: nextMilestone.target_date,
+    };
+  }
+
+  // 4. All completed - return the last one (e.g. Delivered)
+  const last = sorted[sorted.length - 1];
+  return {
+    name: last.name === 'PM Procurement Released' ? 'PO Released' : last.name,
+    status: last.status,
+    target_date: last.target_date,
+  };
+};
+
 const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,14 +278,22 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     if (!searchTerm.trim()) return orders;
     const term = searchTerm.toLowerCase();
     return orders.filter((order) => {
+      const activeM = getActiveMilestone(order);
+      const packSize = order.product?.pack_size || order.pack_size;
+      const orderPrice = order.order_price ?? order.price;
       return (
         (order.order_id && String(order.order_id).toLowerCase().includes(term)) ||
         (order.order_number && order.order_number.toLowerCase().includes(term)) ||
         (order.customer?.customer_name && order.customer.customer_name.toLowerCase().includes(term)) ||
         (order.country?.name && order.country.name.toLowerCase().includes(term)) ||
         (order.sku && order.sku.toLowerCase().includes(term)) ||
+        (order.product?.product_name && order.product.product_name.toLowerCase().includes(term)) ||
         (order.status && order.status.toLowerCase().includes(term)) ||
-        (order.compliance_status && order.compliance_status.toLowerCase().includes(term))
+        (order.compliance_status && order.compliance_status.toLowerCase().includes(term)) ||
+        (packSize && String(packSize).toLowerCase().includes(term)) ||
+        (orderPrice !== undefined && orderPrice !== null && String(orderPrice).toLowerCase().includes(term)) ||
+        (activeM?.name && activeM.name.toLowerCase().includes(term)) ||
+        (activeM?.target_date && formatDate(activeM.target_date).toLowerCase().includes(term))
       );
     });
   }, [orders, searchTerm]);
@@ -197,12 +303,15 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
     customer: (o: any) => o.customer?.customer_name || '-',
     country: (o: any) => o.country?.name || '-',
     product_name: (o: any) => o.product?.product_name || o.product_name || '-',
-    category: (o: any) => o.product?.category || '-',
+    pack_size: (o: any) => o.product?.pack_size || o.pack_size || '-',
     quantity: (o: any) => o.quantity ?? '-',
     delivery_date: (o: any) => formatDate(o.requested_delivery_date),
     status: (o: any) => o.status || '-',
     compliance: (o: any) => o.compliance_status || 'PENDING',
-    price: (o: any) => o.price ?? '-',
+    price: (o: any) => {
+      const p = o.order_price ?? o.price;
+      return p !== null && p !== undefined && p !== '' ? formatCurrency(p, o.currency) : '—';
+    },
     pm_code: (o: any) => o.primary_pm_code || o.pm_code || '-',
     created: (o: any) => formatDate(o.created_at),
   }), []);
@@ -342,14 +451,14 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                 </th>
                 <th>
                   <ExcelHeaderCell
-                    columnKey="category"
-                    label="Manufacturing Unit"
-                    uniqueValues={uniqueValuesMap.category}
-                    selectedValues={filterState.category}
-                    sortDirection={sortState.columnKey === 'category' ? sortState.direction : null}
-                    onFilterChange={(sel) => setColumnFilter('category', sel)}
-                    onSortChange={(dir) => handleSort('category', dir)}
-                    onClearFilter={() => clearColumnFilter('category')}
+                    columnKey="pack_size"
+                    label="Pack Size"
+                    uniqueValues={uniqueValuesMap.pack_size}
+                    selectedValues={filterState.pack_size}
+                    sortDirection={sortState.columnKey === 'pack_size' ? sortState.direction : null}
+                    onFilterChange={(sel) => setColumnFilter('pack_size', sel)}
+                    onSortChange={(dir) => handleSort('pack_size', dir)}
+                    onClearFilter={() => clearColumnFilter('pack_size')}
                   />
                 </th>
                 <th>
@@ -450,13 +559,63 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   <td>{order.customer?.customer_name}</td>
                   <td>{order.country?.name || "-"}</td>
                   <td>{order.product?.product_name || order.product_name || "-"}</td>
-                  <td>{order.product?.category || "-"}</td>
+                  <td>{order.product?.pack_size || order.pack_size || "-"}</td>
                   <td>{order.quantity}</td>
                   <td>{formatDate(order.requested_delivery_date)}</td>
                   <td>
-                    <span className={`status-badge ${getStatusClass(order.status)}`}>
-                      {order.status}
-                    </span>
+                    {(() => {
+                      const milestoneInfo = getActiveMilestone(order);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '135px' }}>
+                          <div>
+                            <span className={`status-badge ${getStatusClass(order.status)}`}>
+                              {order.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: 1.35, marginTop: '2px' }}>
+                            <div>
+                              <span style={{ color: '#64748b', fontWeight: 500 }}>Milestone: </span>
+                              <span style={{ fontWeight: 600, color: '#1e293b' }}>
+                                {milestoneInfo ? milestoneInfo.name : '—'}
+                              </span>
+                              {milestoneInfo && milestoneInfo.status && milestoneInfo.status !== 'PENDING' && (
+                                <span
+                                  style={{
+                                    marginLeft: '4px',
+                                    fontSize: '0.68rem',
+                                    padding: '1px 4px',
+                                    borderRadius: '3px',
+                                    fontWeight: 600,
+                                    backgroundColor:
+                                      milestoneInfo.status === 'COMPLETED'
+                                        ? '#dcfce7'
+                                        : milestoneInfo.status === 'DELAYED'
+                                        ? '#fee2e2'
+                                        : '#fef3c7',
+                                    color:
+                                      milestoneInfo.status === 'COMPLETED'
+                                        ? '#166534'
+                                        : milestoneInfo.status === 'DELAYED'
+                                        ? '#991b1b'
+                                        : '#92400e',
+                                  }}
+                                >
+                                  {milestoneInfo.status}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ marginTop: '1px' }}>
+                              <span style={{ color: '#64748b', fontWeight: 500 }}>Target: </span>
+                              <span style={{ color: '#334155' }}>
+                                {milestoneInfo && milestoneInfo.target_date
+                                  ? formatDate(milestoneInfo.target_date)
+                                  : '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td>
                     <span
@@ -467,7 +626,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                       {order.compliance_status || 'PENDING'}
                     </span>
                   </td>
-                  <td>{order.price}</td>
+                  <td>{formatCurrency(order.order_price ?? order.price, order.currency)}</td>
                   <td>{renderPmCodeAction(order)}</td>
                   <td>{formatDate(order.created_at)}</td>
                   {isExportsTeam && (
@@ -513,8 +672,8 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                 <span className="mobile-card-value">{order.product?.product_name || order.product_name || "-"}</span>
               </div>
               <div className="mobile-card-row">
-                <span className="mobile-card-label">Category</span>
-                <span className="mobile-card-value">{order.product?.category || "-"}</span>
+                <span className="mobile-card-label">Pack Size</span>
+                <span className="mobile-card-value">{order.product?.pack_size || order.pack_size || "-"}</span>
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Quantity</span>
@@ -522,7 +681,7 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Price</span>
-                <span className="mobile-card-value">{order.price}</span>
+                <span className="mobile-card-value">{formatCurrency(order.order_price ?? order.price, order.currency)}</span>
               </div>
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Delivery Date</span>
@@ -538,6 +697,30 @@ const Orders: React.FC<OrdersProps> = ({ user, onLogout }) => {
                   </span>
                 </span>
               </div>
+              {(() => {
+                const milestoneInfo = getActiveMilestone(order);
+                return (
+                  <>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Milestone</span>
+                      <span className="mobile-card-value">
+                        {milestoneInfo ? (
+                          <>
+                            {milestoneInfo.name}
+                            {milestoneInfo.status && milestoneInfo.status !== 'PENDING' ? ` (${milestoneInfo.status})` : ''}
+                          </>
+                        ) : '—'}
+                      </span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Target Date</span>
+                      <span className="mobile-card-value">
+                        {milestoneInfo && milestoneInfo.target_date ? formatDate(milestoneInfo.target_date) : '—'}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
               <div className="mobile-card-row">
                 <span className="mobile-card-label">Compliance</span>
                 <span className="mobile-card-value">
